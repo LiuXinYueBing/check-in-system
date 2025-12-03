@@ -28,7 +28,8 @@
       "Bash(vercel.json)",
       "Bash(vercel:*)",
       "Bash(rm:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

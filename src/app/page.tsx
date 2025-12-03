@@ -6,8 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
-import { Attendee, Event } from '@/types';
-import { QrCode, BarChart3, Users, Calendar } from 'lucide-react';
+import { Attendee } from '@/types';
+import { QrCode } from 'lucide-react';
 
 export default function HomePage() {
   const [formData, setFormData] = useState({
@@ -16,7 +16,23 @@ export default function HomePage() {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [currentEventId, setCurrentEventId] = useState('');
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // 🔥 核心逻辑1: URL参数绑定场次
+  useEffect(() => {
+    // 优先读取URL参数中的event_id
+    const urlEventId = searchParams.get('event_id');
+
+    if (urlEventId) {
+      setCurrentEventId(urlEventId);
+    } else {
+      // 如果没有参数，使用默认ID
+      const defaultEventId = '00000000-0000-0000-0000-000000000000';
+      setCurrentEventId(defaultEventId);
+    }
+  }, [searchParams]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -45,6 +61,7 @@ export default function HomePage() {
     return true;
   };
 
+  // 🔥 核心逻辑2: 智能提交 (先查询再决定操作)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -54,28 +71,31 @@ export default function HomePage() {
     setError('');
 
     try {
-      // 这里使用固定的活动 ID，实际项目中可能需要从 URL 或配置中获取
-      const EVENT_ID = '00000000-0000-0000-0000-000000000000';
-
-      // 首先检查是否已经注册
-      const { data: existingAttendee } = await supabase
+      // 🔍 智能查询：必须同时匹配 phone AND event_id (当前场次)
+      const { data: existingAttendee, error: queryError } = await supabase
         .from('attendees')
         .select('*')
         .eq('phone', formData.phone.trim())
-        .eq('event_id', EVENT_ID)
+        .eq('event_id', currentEventId) // 关键：查询当前场次
         .single();
 
+      if (queryError) {
+        console.error('Query error:', queryError);
+        // 如果查询出错，尝试创建新记录
+        throw new Error('查询失败');
+      }
+
+      // 📋 分支A (老用户)：查到了 -> 直接跳转
       if (existingAttendee) {
-        // 如果已存在，直接跳转到凭证页
         router.push(`/ticket/${existingAttendee.id}`);
         return;
       }
 
-      // 创建新的参会者记录
-      const { data: newAttendee, error } = await supabase
+      // 📝 分支B (新用户)：没查到 -> Insert后跳转
+      const { data: newAttendee, error: insertError } = await supabase
         .from('attendees')
         .insert({
-          event_id: EVENT_ID,
+          event_id: currentEventId, // 使用URL参数或默认的event_id
           name: formData.name.trim(),
           phone: formData.phone.trim(),
           status: 'registered'
@@ -83,11 +103,11 @@ export default function HomePage() {
         .select()
         .single();
 
-      if (error) {
-        throw error;
+      if (insertError) {
+        throw insertError;
       }
 
-      // 跳转到凭证页
+      // 创建成功后跳转到凭证页
       router.push(`/ticket/${newAttendee.id}`);
 
     } catch (err: any) {
@@ -188,66 +208,8 @@ export default function HomePage() {
           <p>提交后将生成您的专属电子凭证</p>
         </div>
 
-        {/* 工作人员快速入口 */}
-        <div className="mt-8 space-y-4">
-          <div className="text-center">
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">工作人员入口</h3>
-            <p className="text-sm text-gray-600 mb-4">快速访问管理功能</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <Button
-              onClick={() => window.location.href = '/staff/scan'}
-              variant="outline"
-              className="h-16 flex-col space-y-1"
-            >
-              <QrCode className="w-6 h-6" />
-              <span className="text-sm">扫码核销</span>
-            </Button>
-
-            <Button
-              onClick={() => window.location.href = '/admin/dashboard'}
-              variant="outline"
-              className="h-16 flex-col space-y-1"
-            >
-              <BarChart3 className="w-6 h-6" />
-              <span className="text-sm">数据看板</span>
-            </Button>
-          </div>
         </div>
+
       </div>
-
-      {/* 底部导航 */}
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-2 z-50">
-        <div className="max-w-4xl mx-auto flex justify-around">
-          <Button
-            variant="default"
-            onClick={() => window.location.href = '/'}
-            className="flex flex-col items-center py-2 px-3 h-auto"
-          >
-            <Users className="w-5 h-5 mb-1" />
-            <span className="text-xs">注册</span>
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={() => window.location.href = '/staff/scan'}
-            className="flex flex-col items-center py-2 px-3 h-auto"
-          >
-            <QrCode className="w-5 h-5 mb-1" />
-            <span className="text-xs">扫码</span>
-          </Button>
-
-          <Button
-            variant="ghost"
-            onClick={() => window.location.href = '/admin/dashboard'}
-            className="flex flex-col items-center py-2 px-3 h-auto"
-          >
-            <BarChart3 className="w-5 h-5 mb-1" />
-            <span className="text-xs">看板</span>
-          </Button>
-        </div>
-      </div>
-    </div>
   );
 }

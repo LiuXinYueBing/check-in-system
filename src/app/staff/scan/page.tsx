@@ -7,13 +7,83 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/supabase';
-import { Attendee } from '@/types';
-import { QrCode, User, Clock, CheckCircle, XCircle, Gift } from 'lucide-react';
+import { Attendee, Event } from '@/types';
+import { QrCode, User, Clock, CheckCircle, XCircle, Gift, MapPin, ChevronDown } from 'lucide-react';
 
 export default function StaffScanPage() {
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(true);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [selectedEventName, setSelectedEventName] = useState('');
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [showEventSelector, setShowEventSelector] = useState(false);
+  // 🔥 场次选择状态初始化和监听
+  useEffect(() => {
+    // 检查本地是否有缓存的活动
+    const cachedEventId = localStorage.getItem('staff_selected_event_id');
+    const cachedEventName = localStorage.getItem('staff_selected_event_name');
+
+    if (cachedEventId && cachedEventName) {
+      setSelectedEventId(cachedEventId);
+      setSelectedEventName(cachedEventName);
+    }
+
+    // 如果没有缓存，强制弹窗选择活动
+    if (!cachedEventId || !cachedEventName) {
+      setShowEventSelector(true);
+    }
+
+    // 加载所有活动
+    fetchEvents();
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      setLoadingEvents(true);
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Fetch events error:', error);
+        toast({
+          title: "加载失败",
+          description: "无法获取活动列表",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setEvents(data || []);
+    } catch (err) {
+      console.error('Fetch events error:', err);
+      toast({
+        title: "加载失败",
+        description: "无法获取活动列表",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  const handleEventSelect = (eventId: string, eventName: string, location: string) => {
+    setSelectedEventId(eventId);
+    setSelectedEventName(eventName);
+    setShowEventSelector(false);
+
+    // 持久化到localStorage
+    localStorage.setItem('staff_selected_event_id', eventId);
+    localStorage.setItem('staff_selected_event_name', `${eventName} - ${location}`);
+  };
+
+  const handleSwitchEvent = () => {
+    setShowEventSelector(true);
+  };
+
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerId = 'qr-scanner-container';
   const { toast } = useToast();
@@ -74,9 +144,58 @@ export default function StaffScanPage() {
     }
   };
 
+  // 🔍 核心校验逻辑：检查该用户的event_id是否等于员工当前选中的event_id
   const handleScanSuccess = async (uuid: string) => {
     setScanning(false);
-    await fetchAttendee(uuid);
+
+    try {
+      // 先查询用户信息
+      const { data: scannedAttendee, error: fetchError } = await supabase
+        .from('attendees')
+        .select(`
+          *,
+          events (*)
+        `)
+        .eq('id', uuid)
+        .single();
+
+      if (fetchError) {
+        console.error('Fetch attendee error:', fetchError);
+        toast({
+          title: "查询失败",
+          description: "无法查询用户信息",
+          variant: "destructive",
+        });
+        // 2秒后重新开始扫描
+        setTimeout(() => setScanning(true), 2000);
+        return;
+      }
+
+      // 🔴 验证：不匹配 -> 场次错误
+      if (scannedAttendee.event_id !== selectedEventId) {
+        toast({
+          title: "⚠️ 场次错误！",
+          description: "该用户属于其他活动，请核实！",
+          variant: "destructive",
+        });
+        // 2秒后重新开始扫描
+        setTimeout(() => setScanning(true), 2000);
+        return;
+      }
+
+      // 🟢 验证：匹配 -> 显示用户信息和操作按钮
+      setAttendee(scannedAttendee);
+
+    } catch (err: any) {
+      console.error('Scan fetch error:', err);
+      toast({
+        title: "查询失败",
+        description: "无法查询用户信息",
+        variant: "destructive",
+      });
+      // 2秒后重新开始扫描
+      setTimeout(() => setScanning(true), 2000);
+    }
   };
 
   const fetchAttendee = async (id: string) => {
@@ -233,13 +352,90 @@ export default function StaffScanPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-8">
       <div className="max-w-2xl mx-auto space-y-6">
         {/* 头部 */}
-        <div className="text-center">
+        <div className="text-center mb-6">
           <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
             <QrCode className="w-10 h-10 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">扫码核销</h1>
-          <p className="text-gray-600">扫描用户二维码进行签到或核销</p>
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">员工工作台</h1>
+          <p className="text-gray-600">选择当前活动场次，扫码核验用户凭证</p>
         </div>
+
+        {/* 🔥 场次选择弹窗 */}
+        {showEventSelector && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-auto p-6 space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">选择活动场次</h3>
+              <p className="text-sm text-gray-600 mb-4">请选择您要执行签到/核销的活动</p>
+
+              {loadingEvents ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                  <p className="mt-4 text-gray-600">正在加载活动列表...</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {events.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">暂无活动</p>
+                  ) : (
+                    events.map((event) => (
+                      <div
+                        key={event.id}
+                        onClick={() => handleEventSelect(event.id, event.name, event.location)}
+                        className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <div className="font-medium text-gray-900">{event.name}</div>
+                        <div className="text-sm text-gray-500 flex items-center">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {event.location}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSwitchEvent}
+                  variant="outline"
+                  className="mt-4"
+                >
+                  取消
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 当前选中的活动 */}
+        {selectedEventId && !showEventSelector && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-blue-900">
+                当前活动：{selectedEventName}
+              </h3>
+              <Button
+                onClick={handleSwitchEvent}
+                variant="outline"
+                size="sm"
+              >
+                <ChevronDown className="w-4 h-4 mr-1" />
+                切换活动
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 🔍 功能B: 本场数据统计 */}
+        {selectedEventId && !showEventSelector && (
+          <div className="bg-white border rounded-xl shadow-lg p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">本场数据</h3>
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              <p className="mt-2 text-sm text-gray-600">正在加载本场数据...</p>
+            </div>
+          </div>
+        )}
 
         {/* 扫描区域 */}
         {!attendee && (
