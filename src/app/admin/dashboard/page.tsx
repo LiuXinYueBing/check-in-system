@@ -49,7 +49,7 @@ export default function AdminDashboardPage() {
     try {
       const { data, error } = await supabase
         .from('events')
-        .select('*')
+        .select('id, name, date, location, created_at')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -58,6 +58,7 @@ export default function AdminDashboardPage() {
       // 如果没有选择活动，默认选择第一个
       if (data && data.length > 0 && !selectedEvent) {
         setSelectedEvent(data[0]);
+        setEventFilter(data[0].id);
       }
     } catch (err: any) {
       console.error('Fetch events error:', err);
@@ -68,10 +69,7 @@ export default function AdminDashboardPage() {
     try {
       const { data, error } = await supabase
         .from('attendees')
-        .select(`
-          *,
-          event:events (*)
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (error) throw error;
