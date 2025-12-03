@@ -380,7 +380,7 @@ export default function StaffScanPage() {
                     events.map((event) => (
                       <div
                         key={event.id}
-                        onClick={() => handleEventSelect(event.id, event.name, event.location)}
+                        onClick={() => handleEventSelect(event.id, event.name, event.location || '未指定地点')}
                         className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
                       >
                         <div className="font-medium text-gray-900">{event.name}</div>
