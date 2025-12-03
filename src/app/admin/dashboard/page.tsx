@@ -7,8 +7,8 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
-import { Attendee, AttendeeStatus } from '@/types';
-import { Users, UserCheck, Gift, TrendingUp, Calendar, Clock } from 'lucide-react';
+import { Attendee, AttendeeStatus, Event } from '@/types';
+import { Users, UserCheck, Gift, TrendingUp, Calendar, Clock, QrCode } from 'lucide-react';
 
 export default function AdminDashboardPage() {
   const [attendees, setAttendees] = useState<Attendee[]>([]);
