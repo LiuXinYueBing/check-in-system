@@ -1,0 +1,55 @@
+{
+  "name": "event-checkin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "基于 Next.js 14 和 Supabase 的移动端优先活动签到与核销系统",
+  "keywords": [
+    "nextjs",
+    "supabase",
+    "react",
+    "typescript",
+    "checkin",
+    "qr-code"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/event-checkin"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit",
+    "format": "next lint --fix"
+  },
+  "dependencies": {
+    "@radix-ui/react-label": "^2.0.2",
+    "@radix-ui/react-select": "^2.0.0",
+    "@radix-ui/react-slot": "^1.0.2",
+    "@radix-ui/react-toast": "^1.1.5",
+    "@supabase/supabase-js": "^2.39.0",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.0.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^0.295.0",
+    "next": "14.2.5",
+    "react": "^18",
+    "react-dom": "^18",
+    "react-qr-code": "^2.0.12",
+    "tailwind-merge": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "autoprefixer": "^10.4.22",
+    "eslint": "^8",
+    "eslint-config-next": "14.2.5",
+    "postcss": "^8",
+    "tailwindcss": "^3.4.1",
+    "typescript": "^5"
+  }
+}

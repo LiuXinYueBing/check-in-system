@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-next-app:*)",
+      "Bash(find:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(gh auth login:*)",
+      "Bash(git remote add:*)",
+      "Bash(npx vercel:*)",
+      "Bash(git push:*)",
+      "Bash(node:*)",
+      "Bash(dir:*)",
+      "Bash(nul:*)",
+      "Bash(npm install:*)",
+      "Bash(vercel env ls:*)",
+      "Bash(vercel env add:*)",
+      "Bash(vercel --prod)",
+      "Bash(npm run build)",
+      "Bash(npx tsc:*)",
+      "Bash(vercel login:*)",
+      "Bash(cat:*)",
+      "Bash(vercel link:*)",
+      "Bash(.vercelignore)",
+      "Bash(vercel --prod --yes)",
+      "Bash(vercel.json)",
+      "Bash(vercel:*)",
+      "Bash(rm:*)",
+      "Bash(xargs:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
