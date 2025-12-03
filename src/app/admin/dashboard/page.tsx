@@ -34,8 +34,16 @@ export default function AdminDashboardPage() {
   }, []);
 
   useEffect(() => {
+    // 当 eventFilter 变化时，同步更新 selectedEvent
+    if (eventFilter !== 'all' && events.length > 0) {
+      const selected = events.find(e => e.id === eventFilter);
+      setSelectedEvent(selected || null);
+    } else if (eventFilter === 'all') {
+      setSelectedEvent(events.length > 0 ? events[0] : null);
+    }
+
     filterAttendees();
-  }, [attendees, statusFilter, eventFilter]);
+  }, [attendees, statusFilter, eventFilter, events]);
 
   const fetchEvents = async () => {
     try {
@@ -83,7 +91,7 @@ export default function AdminDashboardPage() {
       filtered = filtered.filter(attendee => attendee.status === statusFilter);
     }
 
-    // 按活动过滤
+    // 按活动过滤 - 修复逻辑
     if (eventFilter !== 'all') {
       filtered = filtered.filter(attendee => attendee.event_id === eventFilter);
     }
@@ -241,8 +249,6 @@ export default function AdminDashboardPage() {
                           <QRCode
                             value={generateEmergencyLink()}
                             size={200}
-                            level="H"
-                            includeMargin={true}
                           />
                         </div>
                         <p className="text-xs text-gray-500 text-center">
