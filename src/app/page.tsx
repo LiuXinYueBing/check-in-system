@@ -77,13 +77,7 @@ function HomePageContent() {
         .select('*')
         .eq('phone', formData.phone.trim())
         .eq('event_id', currentEventId) // 关键：查询当前场次
-        .single();
-
-      if (queryError) {
-        console.error('Query error:', queryError);
-        // 如果查询出错，尝试创建新记录
-        throw new Error('查询失败');
-      }
+        .maybeSingle(); // 修复：使用 maybeSingle() 而不是 single()
 
       // 📋 分支A (老用户)：查到了 -> 直接跳转
       if (existingAttendee) {
@@ -112,7 +106,13 @@ function HomePageContent() {
 
     } catch (err: any) {
       console.error('Registration error:', err);
-      setError('注册失败，请稍后重试');
+
+      // 区分错误类型：如果是 406 Not Acceptable，说明查询逻辑有问题
+      if (err?.code === 'PGRST116') {
+        setError('系统错误，请联系工作人员');
+      } else {
+        setError('注册失败，请稍后重试');
+      }
     } finally {
       setLoading(false);
     }
