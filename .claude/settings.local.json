@@ -30,7 +30,8 @@
       "Bash(rm:*)",
       "Bash(xargs:*)",
       "Bash(curl:*)",
-      "Bash(ping:*)"
+      "Bash(ping:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
