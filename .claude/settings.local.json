@@ -29,7 +29,8 @@
       "Bash(vercel:*)",
       "Bash(rm:*)",
       "Bash(xargs:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Bash(ping:*)"
     ],
     "deny": [],
     "ask": []
