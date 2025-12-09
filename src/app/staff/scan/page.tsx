@@ -19,6 +19,13 @@ export default function StaffScanPage() {
   const [selectedEventName, setSelectedEventName] = useState('');
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [showEventSelector, setShowEventSelector] = useState(false);
+  const [eventStats, setEventStats] = useState({
+    total: 0,
+    registered: 0,
+    checkedIn: 0,
+    redeemed: 0,
+    loading: true
+  });
   // 🔥 场次选择状态初始化和监听
   useEffect(() => {
     // 加载所有活动
@@ -56,6 +63,8 @@ export default function StaffScanPage() {
         setShowEventSelector(false);
         // 只有有缓存活动时才开始扫描
         setScanning(true);
+        // 加载本场统计数据
+        fetchEventStats(cachedEventId);
       } else {
         console.log('📋 未找到缓存活动，显示选择器');
         setShowEventSelector(true);
@@ -85,12 +94,48 @@ export default function StaffScanPage() {
 
     // 选择活动后开始扫描
     setScanning(true);
+    // 加载本场统计数据
+    fetchEventStats(eventId);
+  };
+
+  const fetchEventStats = async (eventId: string) => {
+    setEventStats(prev => ({ ...prev, loading: true }));
+    try {
+      const { data, error } = await supabase
+        .from('attendees')
+        .select('*')
+        .eq('event_id', eventId);
+
+      if (error) throw error;
+
+      const stats = (data || []).reduce((acc, attendee) => {
+        acc.total++;
+        switch (attendee.status) {
+          case 'registered':
+            acc.registered++;
+            break;
+          case 'checked_in':
+            acc.checkedIn++;
+            break;
+          case 'redeemed':
+            acc.redeemed++;
+            break;
+        }
+        return acc;
+      }, { total: 0, registered: 0, checkedIn: 0, redeemed: 0 });
+
+      setEventStats({ ...stats, loading: false });
+    } catch (err: any) {
+      console.error('Fetch event stats error:', err);
+      setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: false });
+    }
   };
 
   const handleSwitchEvent = () => {
     console.log('🔄 切换活动，停止扫描');
     setScanning(false);
     setShowEventSelector(true);
+    setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: true });
   };
 
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
@@ -234,6 +279,8 @@ export default function StaffScanPage() {
 
       // 🟢 验证：匹配 -> 显示用户信息和操作按钮
       setAttendee(scannedAttendee);
+      // 刷新本场统计数据
+      fetchEventStats(selectedEventId);
 
     } catch (err: any) {
       console.error('Scan fetch error:', err);
@@ -300,6 +347,8 @@ export default function StaffScanPage() {
 
       // 刷新数据
       await fetchAttendee(attendee.id);
+      // 刷新本场统计数据
+      fetchEventStats(selectedEventId);
     } catch (err: any) {
       console.error('Check-in error:', err);
       toast({
@@ -335,6 +384,8 @@ export default function StaffScanPage() {
 
       // 刷新数据
       await fetchAttendee(attendee.id);
+      // 刷新本场统计数据
+      fetchEventStats(selectedEventId);
     } catch (err: any) {
       console.error('Redeem error:', err);
       toast({
@@ -487,10 +538,31 @@ export default function StaffScanPage() {
         {selectedEventId && !showEventSelector && (
           <div className="bg-white border rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">本场数据</h3>
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-              <p className="mt-2 text-sm text-gray-600">正在加载本场数据...</p>
-            </div>
+            {eventStats.loading ? (
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+                <p className="mt-2 text-sm text-gray-600">正在加载本场数据...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-blue-50 rounded-lg">
+                  <div className="text-2xl font-bold text-blue-900">{eventStats.total}</div>
+                  <div className="text-xs text-blue-600">总报名</div>
+                </div>
+                <div className="text-center p-3 bg-yellow-50 rounded-lg">
+                  <div className="text-2xl font-bold text-yellow-900">{eventStats.registered}</div>
+                  <div className="text-xs text-yellow-600">待入场</div>
+                </div>
+                <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="text-2xl font-bold text-green-900">{eventStats.checkedIn}</div>
+                  <div className="text-xs text-green-600">已入场</div>
+                </div>
+                <div className="text-center p-3 bg-orange-50 rounded-lg">
+                  <div className="text-2xl font-bold text-orange-900">{eventStats.redeemed}</div>
+                  <div className="text-xs text-orange-600">已核销</div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -643,22 +715,7 @@ export default function StaffScanPage() {
           </div>
         )}
 
-        {/* 底部导航 */}
-        <div className="flex space-x-3">
-          <Button
-            onClick={() => window.location.href = '/'}
-            variant="outline"
-            className="flex-1"
-          >
-            返回首页
-          </Button>
-          <Button
-            onClick={() => window.location.href = '/admin/dashboard'}
-            className="flex-1"
-          >
-            数据看板
-          </Button>
-        </div>
+        {/* 底部导航 - 员工端不显示导航按钮 */}
       </div>
     </div>
   );
