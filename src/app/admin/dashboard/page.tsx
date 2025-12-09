@@ -322,13 +322,13 @@ export default function AdminDashboardPage() {
               <div className="flex items-center space-x-3">
                 {/* 活动选择下拉 */}
                 <Select value={eventFilter} onValueChange={setEventFilter}>
-                  <SelectTrigger className="w-48">
+                  <SelectTrigger className="w-48 min-w-0">
                     <SelectValue placeholder="选择活动" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="w-48 max-w-48 overflow-hidden">
                     <SelectItem value="all">全部活动</SelectItem>
                     {events.map((event) => (
-                      <SelectItem key={event.id} value={event.id}>
+                      <SelectItem key={event.id} value={event.id} className="truncate">
                         {event.name} - {event.location}
                       </SelectItem>
                     ))}
