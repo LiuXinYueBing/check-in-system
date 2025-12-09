@@ -31,7 +31,13 @@
       "Bash(xargs:*)",
       "Bash(curl:*)",
       "Bash(ping:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm run dev)",
+      "Bash(ipconfig:*)",
+      "Bash(findstr:*)",
+      "Bash(npm update:*)",
+      "Bash(tree:*)",
+      "Bash(npm run type-check:*)"
     ],
     "deny": [],
     "ask": []

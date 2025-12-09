@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
 import { Attendee, AttendeeStatus, Event } from '@/types';
-import { Users, UserCheck, Gift, TrendingUp, Calendar, Clock, QrCode, X } from 'lucide-react';
+import { Users, UserCheck, Gift, TrendingUp, Calendar, Clock, QrCode, X, Plus, Settings, Trash2, Copy } from 'lucide-react';
 import QRCode from 'react-qr-code';
 
 export default function AdminDashboardPage() {
@@ -21,6 +22,16 @@ export default function AdminDashboardPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [showQRDialog, setShowQRDialog] = useState(false);
+  const [showManageDialog, setShowManageDialog] = useState(false);
+  const [showEventQRDialog, setShowEventQRDialog] = useState(false);
+  const [selectedEventForQR, setSelectedEventForQR] = useState<Event | null>(null);
+  const [newEvent, setNewEvent] = useState({
+    name: '',
+    location: '',
+    date: ''
+  });
+  const [loadingCreate, setLoadingCreate] = useState(false);
+  const [loadingDelete, setLoadingDelete] = useState<string>('');
   const [stats, setStats] = useState({
     total: 0,
     checkedIn: 0,
@@ -165,6 +176,108 @@ export default function AdminDashboardPage() {
     return `${baseUrl}?event_id=${selectedEvent.id}`;
   };
 
+  // 创建新活动
+  const handleCreateEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!newEvent.name.trim()) {
+      alert('请填写活动名称');
+      return;
+    }
+
+    setLoadingCreate(true);
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .insert({
+          name: newEvent.name.trim(),
+          location: newEvent.location.trim(),
+          date: newEvent.date.trim()
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // 刷新活动列表
+      await fetchEvents();
+
+      // 清空表单
+      setNewEvent({ name: '', location: '', date: '' });
+
+      // 显示新活动的二维码
+      setSelectedEventForQR(data);
+      setShowManageDialog(false);
+      setShowEventQRDialog(true);
+
+    } catch (err: any) {
+      console.error('Create event error:', err);
+      alert('创建活动失败，请重试');
+    } finally {
+      setLoadingCreate(false);
+    }
+  };
+
+  // 删除活动
+  const handleDeleteEvent = async (event: Event) => {
+    if (!confirm(`确认删除活动"${event.name}"？\n\n删除活动将同时删除该活动下所有的报名数据，此操作不可恢复！`)) {
+      return;
+    }
+
+    setLoadingDelete(event.id);
+    try {
+      // 先删除该活动的所有报名数据
+      const { error: deleteAttendeesError } = await supabase
+        .from('attendees')
+        .delete()
+        .eq('event_id', event.id);
+
+      if (deleteAttendeesError) throw deleteAttendeesError;
+
+      // 再删除活动
+      const { error: deleteEventError } = await supabase
+        .from('events')
+        .delete()
+        .eq('id', event.id);
+
+      if (deleteEventError) throw deleteEventError;
+
+      // 刷新活动列表和参与者列表
+      await fetchEvents();
+      await fetchAttendees();
+
+      alert('活动删除成功');
+
+    } catch (err: any) {
+      console.error('Delete event error:', err);
+      alert('删除活动失败，请重试');
+    } finally {
+      setLoadingDelete('');
+    }
+  };
+
+  // 显示活动二维码
+  const handleShowEventQR = (event: Event) => {
+    setSelectedEventForQR(event);
+    setShowManageDialog(false);
+    setShowEventQRDialog(true);
+  };
+
+  // 生成活动报名链接
+  const generateEventLink = (event: Event) => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}?event_id=${event.id}`;
+  };
+
+  // 复制链接到剪贴板
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('链接已复制到剪贴板');
+    }).catch(() => {
+      alert('复制失败，请手动复制');
+    });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
@@ -218,6 +331,122 @@ export default function AdminDashboardPage() {
                     ))}
                   </SelectContent>
                 </Select>
+
+                {/* 活动管理按钮 */}
+                <Dialog open={showManageDialog} onOpenChange={setShowManageDialog}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Settings className="w-4 h-4 mr-2" />
+                      活动管理
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle className="text-center">活动管理</DialogTitle>
+                      <DialogDescription className="text-center">
+                        创建新活动或管理现有活动
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-6">
+                      {/* 创建新活动表单 */}
+                      <div className="border rounded-lg p-4">
+                        <h3 className="text-lg font-semibold mb-4 flex items-center">
+                          <Plus className="w-5 h-5 mr-2" />
+                          创建新活动
+                        </h3>
+                        <form onSubmit={handleCreateEvent} className="space-y-4">
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              活动名称 <span className="text-red-500">*</span>
+                            </label>
+                            <Input
+                              value={newEvent.name}
+                              onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
+                              placeholder="请输入活动名称"
+                              disabled={loadingCreate}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              活动地点
+                            </label>
+                            <Input
+                              value={newEvent.location}
+                              onChange={(e) => setNewEvent({ ...newEvent, location: e.target.value })}
+                              placeholder="请输入活动地点"
+                              disabled={loadingCreate}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium mb-1">
+                              活动日期
+                            </label>
+                            <Input
+                              type="date"
+                              value={newEvent.date}
+                              onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
+                              disabled={loadingCreate}
+                            />
+                          </div>
+                          <Button
+                            type="submit"
+                            className="w-full"
+                            disabled={loadingCreate}
+                          >
+                            {loadingCreate ? '创建中...' : '创建活动'}
+                          </Button>
+                        </form>
+                      </div>
+
+                      {/* 现有活动列表 */}
+                      <div className="border rounded-lg p-4">
+                        <h3 className="text-lg font-semibold mb-4 flex items-center">
+                          <Calendar className="w-5 h-5 mr-2" />
+                          现有活动
+                        </h3>
+                        {events.length === 0 ? (
+                          <p className="text-gray-500 text-center py-4">暂无活动</p>
+                        ) : (
+                          <div className="space-y-3">
+                            {events.map((event) => (
+                              <div key={event.id} className="border rounded-lg p-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <h4 className="font-medium text-gray-900">{event.name}</h4>
+                                    <p className="text-sm text-gray-500">
+                                      {event.location && <span>📍 {event.location}</span>}
+                                      {event.date && <span className="ml-2">📅 {event.date}</span>}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => handleShowEventQR(event)}
+                                    >
+                                      <QrCode className="w-4 h-4 mr-1" />
+                                      链接
+                                    </Button>
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => handleDeleteEvent(event)}
+                                      disabled={loadingDelete === event.id}
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                      {loadingDelete === event.id ? '删除中...' : '删除'}
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
 
                 {/* 应急二维码按钮 */}
                 {selectedEvent && (
@@ -397,6 +626,56 @@ export default function AdminDashboardPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* 活动二维码弹窗 */}
+        {selectedEventForQR && (
+          <Dialog open={showEventQRDialog} onOpenChange={setShowEventQRDialog}>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle className="text-center">活动报名二维码</DialogTitle>
+                <DialogDescription className="text-center">
+                  用户扫描此二维码可直接进入活动报名页面
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex flex-col items-center space-y-4 p-4">
+                <div className="text-center space-y-2">
+                  <p className="font-semibold text-gray-900">{selectedEventForQR.name}</p>
+                  <p className="text-sm text-gray-600 flex items-center justify-center">
+                    <Calendar className="w-4 h-4 mr-1" />
+                    {selectedEventForQR.location || '未指定地点'}
+                  </p>
+                </div>
+                <div className="bg-white p-4 rounded-lg shadow-inner">
+                  <QRCode
+                    value={generateEventLink(selectedEventForQR)}
+                    size={200}
+                  />
+                </div>
+                <div className="space-y-2 w-full">
+                  <p className="text-xs text-gray-500 text-center">
+                    报名链接：
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={generateEventLink(selectedEventForQR)}
+                      className="flex-1 text-xs p-2 border rounded bg-gray-50"
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(generateEventLink(selectedEventForQR))}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        )}
 
         {/* 底部导航 */}
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">

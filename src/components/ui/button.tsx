@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "default" | "secondary" | "outline" | "ghost";
+  variant?: "default" | "secondary" | "outline" | "ghost" | "destructive";
   size?: "default" | "sm" | "lg";
 }
 
@@ -24,6 +24,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
               variant === "outline",
             "text-gray-700 hover:bg-gray-100 focus-visible:ring-gray-500":
               variant === "ghost",
+            "bg-red-600 text-white shadow-lg hover:bg-red-700 focus-visible:ring-red-500":
+              variant === "destructive",
           },
           {
             "h-12 px-6 py-3": size === "default",

@@ -21,20 +21,6 @@ export default function StaffScanPage() {
   const [showEventSelector, setShowEventSelector] = useState(false);
   // 🔥 场次选择状态初始化和监听
   useEffect(() => {
-    // 检查本地是否有缓存的活动
-    const cachedEventId = localStorage.getItem('staff_selected_event_id');
-    const cachedEventName = localStorage.getItem('staff_selected_event_name');
-
-    if (cachedEventId && cachedEventName) {
-      setSelectedEventId(cachedEventId);
-      setSelectedEventName(cachedEventName);
-    }
-
-    // 如果没有缓存，强制弹窗选择活动
-    if (!cachedEventId || !cachedEventName) {
-      setShowEventSelector(true);
-    }
-
     // 加载所有活动
     fetchEvents();
   }, []);
@@ -58,6 +44,23 @@ export default function StaffScanPage() {
       }
 
       setEvents(data || []);
+
+      // 检查本地是否有缓存的活动
+      const cachedEventId = localStorage.getItem('staff_selected_event_id');
+      const cachedEventName = localStorage.getItem('staff_selected_event_name');
+
+      if (cachedEventId && cachedEventName) {
+        console.log('📋 找到缓存活动:', cachedEventName);
+        setSelectedEventId(cachedEventId);
+        setSelectedEventName(cachedEventName);
+        setShowEventSelector(false);
+        // 只有有缓存活动时才开始扫描
+        setScanning(true);
+      } else {
+        console.log('📋 未找到缓存活动，显示选择器');
+        setShowEventSelector(true);
+        setScanning(false);
+      }
     } catch (err) {
       console.error('Fetch events error:', err);
       toast({
@@ -71,6 +74,7 @@ export default function StaffScanPage() {
   };
 
   const handleEventSelect = (eventId: string, eventName: string, location: string) => {
+    console.log('🎯 选择活动:', eventName);
     setSelectedEventId(eventId);
     setSelectedEventName(eventName);
     setShowEventSelector(false);
@@ -78,15 +82,37 @@ export default function StaffScanPage() {
     // 持久化到localStorage
     localStorage.setItem('staff_selected_event_id', eventId);
     localStorage.setItem('staff_selected_event_name', `${eventName} - ${location}`);
+
+    // 选择活动后开始扫描
+    setScanning(true);
   };
 
   const handleSwitchEvent = () => {
+    console.log('🔄 切换活动，停止扫描');
+    setScanning(false);
     setShowEventSelector(true);
   };
 
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerId = 'qr-scanner-container';
   const { toast } = useToast();
+
+  // 🔥 简化的摄像头权限检查
+  const checkCameraPermission = async (): Promise<boolean> => {
+    try {
+      // 检查浏览器是否支持getUserMedia
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('⚠️ 浏览器不支持 getUserMedia');
+        return true; // 让扫描器自己处理错误
+      }
+
+      console.log('✅ 浏览器支持摄像头，让扫描器处理权限');
+      return true; // 让 Html5QrcodeScanner 自己处理权限请求
+    } catch (error: any) {
+      console.warn('⚠️ 权限检查异常，让扫描器处理:', error);
+      return true; // 让扫描器自己处理
+    }
+  };
 
   useEffect(() => {
     if (scanning) {
@@ -100,8 +126,27 @@ export default function StaffScanPage() {
     };
   }, [scanning]);
 
-  const startScanner = () => {
+  const startScanner = async () => {
+    console.log('🔍 开始启动扫描器...');
+
+    // 检查容器是否存在
+    const container = document.getElementById(containerId);
+    if (!container) {
+      console.error('❌ 扫描器容器不存在:', containerId);
+      return;
+    }
+
     try {
+      console.log('📹 检查摄像头权限...');
+      // 🔥 首先检查摄像头权限
+      const hasPermission = await checkCameraPermission();
+      if (!hasPermission) {
+        console.error('❌ 摄像头权限检查失败');
+        return;
+      }
+
+      console.log('✅ 摄像头权限检查通过，初始化扫描器...');
+
       const scanner = new Html5QrcodeScanner(
         containerId,
         {
@@ -114,20 +159,24 @@ export default function StaffScanPage() {
 
       scanner.render(
         (decodedText) => {
+          console.log('✅ 扫描成功:', decodedText);
           handleScanSuccess(decodedText);
         },
         (error) => {
           // 忽略扫描错误
-          console.warn('Scan error:', error);
+          if (error && !error.includes('No QR code found')) {
+            console.warn('⚠️ Scan error:', error);
+          }
         }
       );
 
       scannerRef.current = scanner;
+      console.log('✅ 扫描器初始化完成');
     } catch (error) {
-      console.error('Scanner start error:', error);
+      console.error('❌ Scanner start error:', error);
       toast({
         title: "扫描器启动失败",
-        description: "请确保摄像头权限已开启",
+        description: `${error instanceof Error ? error.message : "请确保摄像头权限已开启"}`,
         variant: "destructive",
       });
     }
@@ -344,8 +393,16 @@ export default function StaffScanPage() {
   };
 
   const resetScanner = () => {
+    console.log('🔄 重置扫描器');
     setAttendee(null);
     setScanning(true);
+  };
+
+  const manualStartScanner = async () => {
+    console.log('🔧 手动启动扫描器');
+    stopScanner(); // 先停止现有扫描器
+    await new Promise(resolve => setTimeout(resolve, 500)); // 等待 500ms
+    setScanning(true); // 重新开始扫描
   };
 
   return (
@@ -438,7 +495,7 @@ export default function StaffScanPage() {
         )}
 
         {/* 扫描区域 */}
-        {!attendee && (
+        {!attendee && !showEventSelector && (
           <Card className="shadow-xl border-0">
             <CardHeader>
               <CardTitle className="text-center">
@@ -453,8 +510,16 @@ export default function StaffScanPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {scanning ? (
-                <div className="flex justify-center">
+                <div className="flex flex-col items-center space-y-4">
                   <div id={containerId} className="w-full max-w-sm" />
+                  <Button
+                    onClick={manualStartScanner}
+                    variant="outline"
+                    size="sm"
+                    className="text-xs"
+                  >
+                    🔧 重启扫描器
+                  </Button>
                 </div>
               ) : (
                 <div className="text-center py-8">
@@ -462,6 +527,18 @@ export default function StaffScanPage() {
                   <p className="mt-4 text-gray-600">正在处理...</p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 如果没有选择活动，显示提示 */}
+        {!attendee && showEventSelector === false && scanning === false && (
+          <Card className="shadow-xl border-0">
+            <CardContent className="text-center py-8">
+              <p className="text-gray-600 mb-4">请先选择活动场次</p>
+              <Button onClick={() => setShowEventSelector(true)}>
+                选择活动
+              </Button>
             </CardContent>
           </Card>
         )}
