@@ -80,7 +80,10 @@ export default function AdminDashboardPage() {
     try {
       const { data, error } = await supabase
         .from('attendees')
-        .select('*')
+        .select(`
+          *,
+          event:events (id, name, location, date, created_at)
+        `)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
