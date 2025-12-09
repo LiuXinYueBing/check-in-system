@@ -23,32 +23,72 @@ export default function TestQRPage() {
     };
   }, []);
 
-  // 🔥 修复摄像头选择器文字旋转问题
+  // 🔥 修复摄像头选择器文字旋转问题 - 强化版本
   const fixCameraSelectorStyles = () => {
     const container = document.getElementById(containerId);
-    if (!container) return;
+    if (!container) {
+      console.warn('⚠️ 扫描器容器未找到:', containerId);
+      return;
+    }
 
-    // 查找扫描器内的所有 select 和 button 元素
-    const elementsToFix = container.querySelectorAll('select, button, #qr-reader select, #qr-reader button');
+    console.log('🔧 开始修复扫描器样式 (测试页面)...');
 
-    elementsToFix.forEach((element) => {
-      const el = element as HTMLElement;
-      el.style.setProperty('transform', 'none', 'important');
-      el.style.setProperty('animation', 'none', 'important');
-      el.style.setProperty('transition', 'none', 'important');
-      el.style.setProperty('-webkit-transform', 'none', 'important');
-      el.style.setProperty('-webkit-animation', 'none', 'important');
-      el.style.setProperty('-webkit-transition', 'none', 'important');
+    // 扩大选择范围：查找所有可能的元素
+    const selectors = [
+      'select', 'button', 'div', 'span', 'a', 'p', 'label', 'option',
+      '#qr-reader *', '[id*="qr"] *', '[class*="qr"] *',
+      'html5-qrcode-component *'
+    ];
+
+    let totalElementsFixed = 0;
+
+    selectors.forEach(selector => {
+      try {
+        const elements = container.querySelectorAll(selector);
+        console.log(`🔍 选择器 "${selector}" 找到 ${elements.length} 个元素`);
+
+        elements.forEach((element, index) => {
+          const el = element as HTMLElement;
+          const tagName = el.tagName.toLowerCase();
+          const textContent = el.textContent?.trim().substring(0, 30) || '';
+
+          // 应用所有必要的样式
+          el.style.setProperty('transform', 'none', 'important');
+          el.style.setProperty('animation', 'none', 'important');
+          el.style.setProperty('transition', 'none', 'important');
+          el.style.setProperty('-webkit-transform', 'none', 'important');
+          el.style.setProperty('-webkit-animation', 'none', 'important');
+          el.style.setProperty('-webkit-transition', 'none', 'important');
+          el.style.setProperty('position', 'static', 'important');
+          el.style.setProperty('display', '', 'important'); // 不覆盖display
+
+          // 检查是否有computed样式仍然包含动画
+          const computedStyle = window.getComputedStyle(el);
+          const hasTransform = computedStyle.transform !== 'none' && computedStyle.transform !== 'matrix(1, 0, 0, 1, 0, 0)';
+          const hasAnimation = computedStyle.animation !== 'none' && computedStyle.animationDuration !== '0s';
+
+          if (hasTransform || hasAnimation) {
+            console.warn(`⚠️ 元素仍有动画/变换: ${tagName} - ${textContent}`, {
+              transform: computedStyle.transform,
+              animation: computedStyle.animation,
+              element: el
+            });
+          }
+
+          // 特别关注可能包含"Select Camera"、"Stop Scanning"等文字的元素
+          if (textContent.includes('Select') || textContent.includes('Camera') ||
+              textContent.includes('Stop') || textContent.includes('Scanning')) {
+            console.log(`✅ 修复关键元素: ${tagName} - "${textContent}"`, el);
+          }
+
+          totalElementsFixed++;
+        });
+      } catch (error) {
+        console.error(`❌ 选择器 "${selector}" 执行失败:`, error);
+      }
     });
 
-    // 同时修复可能的父容器
-    const parentElements = container.querySelectorAll('[id*="qr"], [class*="qr"]');
-    parentElements.forEach((element) => {
-      const el = element as HTMLElement;
-      el.style.setProperty('transform', 'none', 'important');
-      el.style.setProperty('animation', 'none', 'important');
-      el.style.setProperty('transition', 'none', 'important');
-    });
+    console.log(`✅ 测试页面样式修复完成，总共处理了 ${totalElementsFixed} 个元素`);
   };
 
   // 启动定时器持续修复样式

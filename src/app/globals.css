@@ -61,14 +61,22 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* HTML5 QR Code 扫描器样式修复 */
+/* HTML5 QR Code 扫描器样式修复 - 强化版本 */
 #qr-scanner-container,
 #qr-test-container,
 #qr-scanner-container *,
-#qr-test-container * {
+#qr-test-container *,
+[id*="qr"],
+[id*="qr"] *,
+[class*="qr"],
+[class*="qr"] * {
   transform: none !important;
   animation: none !important;
   transition: none !important;
+  -webkit-transform: none !important;
+  -webkit-animation: none !important;
+  -webkit-transition: none !important;
+  position: static !important;
 }
 
 #qr-scanner-container div,
@@ -82,13 +90,28 @@ button {
 #qr-scanner-container option,
 #qr-test-container option,
 #qr-scanner-container label,
-#qr-test-container label {
+#qr-test-container label,
+#qr-scanner-container a,
+#qr-test-container a,
+#qr-scanner-container p,
+#qr-test-container p {
   transform: none !important;
   animation: none !important;
   transition: none !important;
   -webkit-transform: none !important;
   -webkit-animation: none !important;
   -webkit-transition: none !important;
+  position: static !important;
+}
+
+/* 确保扫描器内的元素不受全局动画影响 */
+#qr-scanner-container *:not(.global-notification):not(.global-notification *),
+#qr-test-container *:not(.global-notification):not(.global-notification *),
+[id*="qr"] *:not(.global-notification):not(.global-notification *),
+[class*="qr"] *:not(.global-notification):not(.global-notification *) {
+  animation: none !important;
+  transform: none !important;
+  transition: none !important;
 }
 
 /* 全局通知弹窗样式 */
