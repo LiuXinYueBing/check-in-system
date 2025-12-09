@@ -161,6 +161,7 @@ export default function StaffScanPage() {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerId = 'qr-scanner-container';
   const styleIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [isScannerInitialized, setIsScannerInitialized] = useState(false);
   const { toast } = useToast();
 
   // 全局通知函数
@@ -171,114 +172,52 @@ export default function StaffScanPage() {
     }, 3000);
   };
 
-  // 🔥 修复摄像头选择器文字旋转问题 - 强化版本
+  // 🔥 修复摄像头选择器文字旋转问题 - 简化版本
   const fixCameraSelectorStyles = () => {
+    console.log('🔧 简化样式修复...');
+
+    // 隐藏不需要的UI元素
+    const elementsToHide = [
+      'button', 'select', 'label'
+    ];
+
     const container = document.getElementById(containerId);
-    if (!container) {
-      console.warn('⚠️ 扫描器容器未找到:', containerId);
-      return;
-    }
+    if (!container) return;
 
-    console.log('🔧 开始修复扫描器样式...');
+    elementsToHide.forEach(tagName => {
+      const elements = container.querySelectorAll(tagName);
+      elements.forEach((el) => {
+        (el as HTMLElement).style.display = 'none';
+      });
+    });
 
-    // 扩大选择范围：查找所有可能的元素
-    const selectors = [
-      'select', 'button', 'div', 'span', 'a', 'p', 'label', 'option',
-      '#qr-reader *', '[id*="qr"] *', '[class*="qr"] *',
-      'html5-qrcode-component *'
-    ];
+    // 修复可能的旋转文字
+    const textElements = container.querySelectorAll('span, div, a');
+    textElements.forEach((el) => {
+      const element = el as HTMLElement;
+      const textContent = element.textContent?.trim() || '';
 
-    let totalElementsFixed = 0;
-
-    selectors.forEach(selector => {
-      try {
-        const elements = container.querySelectorAll(selector);
-        console.log(`🔍 选择器 "${selector}" 找到 ${elements.length} 个元素`);
-
-        elements.forEach((element, index) => {
-          const el = element as HTMLElement;
-          const tagName = el.tagName.toLowerCase();
-          const textContent = el.textContent?.trim().substring(0, 30) || '';
-
-          // 应用所有必要的样式
-          el.style.setProperty('transform', 'none', 'important');
-          el.style.setProperty('animation', 'none', 'important');
-          el.style.setProperty('transition', 'none', 'important');
-          el.style.setProperty('-webkit-transform', 'none', 'important');
-          el.style.setProperty('-webkit-animation', 'none', 'important');
-          el.style.setProperty('-webkit-transition', 'none', 'important');
-          el.style.setProperty('position', 'static', 'important');
-          el.style.setProperty('display', '', 'important'); // 不覆盖display
-
-          // 检查是否有computed样式仍然包含动画
-          const computedStyle = window.getComputedStyle(el);
-          const hasTransform = computedStyle.transform !== 'none' && computedStyle.transform !== 'matrix(1, 0, 0, 1, 0, 0)';
-          const hasAnimation = computedStyle.animation !== 'none' && computedStyle.animationDuration !== '0s';
-
-          if (hasTransform || hasAnimation) {
-            console.warn(`⚠️ 元素仍有动画/变换: ${tagName} - ${textContent}`, {
-              transform: computedStyle.transform,
-              animation: computedStyle.animation,
-              element: el
-            });
-          }
-
-          // 特别关注可能包含"Select Camera"、"Stop Scanning"等文字的元素
-          if (textContent.includes('Select') || textContent.includes('Camera') ||
-              textContent.includes('Stop') || textContent.includes('Scanning')) {
-            console.log(`✅ 修复关键元素: ${tagName} - "${textContent}"`, el);
-          }
-
-          totalElementsFixed++;
-        });
-      } catch (error) {
-        console.error(`❌ 选择器 "${selector}" 执行失败:`, error);
+      if (textContent.includes('Select Camera') || textContent.includes('Stop Scanning')) {
+        console.log(`✅ 修复文字旋转: ${textContent}`);
+        element.style.transform = 'none';
+        element.style.animation = 'none';
+        element.style.transition = 'none';
       }
     });
 
-    // 额外检查：查找document中所有可能的扫描器相关元素
-    const globalSelectors = [
-      '[id*="qr"]', '[class*="qr"]', 'html5-qrcode-component',
-      '[id*="reader"]', '[class*="reader"]'
-    ];
-
-    globalSelectors.forEach(selector => {
-      try {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(el => {
-          const htmlElement = el as HTMLElement;
-          if (htmlElement.textContent?.includes('Select Camera') ||
-              htmlElement.textContent?.includes('Stop Scanning')) {
-            console.log(`🌍 发现全局扫描器元素: ${selector}`, htmlElement);
-            htmlElement.style.setProperty('transform', 'none', 'important');
-            htmlElement.style.setProperty('animation', 'none', 'important');
-            htmlElement.style.setProperty('transition', 'none', 'important');
-            totalElementsFixed++;
-          }
-        });
-      } catch (error) {
-        console.error(`❌ 全局选择器 "${selector}" 执行失败:`, error);
-      }
-    });
-
-    console.log(`✅ 样式修复完成，总共处理了 ${totalElementsFixed} 个元素`);
+    console.log('✅ 样式修复完成');
   };
 
   // 启动定时器持续修复样式
   const startStyleFixInterval = () => {
-    console.log('⏰ 启动样式修复定时器...');
+    console.log('⏰ 启动简化样式修复定时器...');
     // 立即执行一次
     fixCameraSelectorStyles();
 
-    let fixCount = 0;
-    // 每200ms执行一次，更频繁地检查
+    // 每1秒执行一次，降低频率
     styleIntervalRef.current = setInterval(() => {
-      fixCount++;
-      if (fixCount % 10 === 0) { // 每2秒打印一次状态
-        console.log(`⏰ 样式修复定时器运行中... (${fixCount} 次)`);
-      }
       fixCameraSelectorStyles();
-    }, 200);
+    }, 1000);
   };
 
   // 停止样式修复定时器
@@ -308,12 +247,12 @@ export default function StaffScanPage() {
   };
 
   useEffect(() => {
-    if (scanning) {
+    if (scanning && !isScannerInitialized) {
       startScanner();
-    } else {
+    } else if (!scanning && isScannerInitialized) {
       stopScanner();
     }
-  }, [scanning]);
+  }, [scanning, isScannerInitialized]);
 
   // 组件卸载时清除定时器
   useEffect(() => {
@@ -325,6 +264,12 @@ export default function StaffScanPage() {
 
   const startScanner = async () => {
     console.log('🔍 开始启动扫描器...');
+
+    // 防止重复初始化
+    if (scannerRef.current || isScannerInitialized) {
+      console.warn('⚠️ 扫描器已经初始化，跳过重复初始化');
+      return;
+    }
 
     // 检查容器是否存在
     const container = document.getElementById(containerId);
@@ -339,10 +284,14 @@ export default function StaffScanPage() {
       const hasPermission = await checkCameraPermission();
       if (!hasPermission) {
         console.error('❌ 摄像头权限检查失败');
+        showGlobalNotification('error', '请允许访问摄像头');
         return;
       }
 
       console.log('✅ 摄像头权限检查通过，初始化扫描器...');
+
+      // 清空容器内容，防止重复渲染
+      container.innerHTML = '';
 
       const scanner = new Html5QrcodeScanner(
         containerId,
@@ -350,6 +299,7 @@ export default function StaffScanPage() {
           fps: 10,
           qrbox: { width: 250, height: 250 },
           supportedScanTypes: [0], // 0 for camera
+          disableFlip: false
         },
         false
       );
@@ -368,6 +318,7 @@ export default function StaffScanPage() {
       );
 
       scannerRef.current = scanner;
+      setIsScannerInitialized(true);
       console.log('✅ 扫描器初始化完成');
 
       // 启动样式修复定时器
@@ -377,21 +328,33 @@ export default function StaffScanPage() {
 
     } catch (error) {
       console.error('❌ Scanner start error:', error);
+      setIsScannerInitialized(false);
       showGlobalNotification('error', `扫描器启动失败：${error instanceof Error ? error.message : "请确保摄像头权限已开启"}`);
     }
   };
 
   const stopScanner = () => {
+    console.log('🛑 停止扫描器...');
     // 停止样式修复定时器
     stopStyleFixInterval();
 
     if (scannerRef.current) {
       try {
         scannerRef.current.clear();
+        console.log('✅ 扫描器已停止');
       } catch (error) {
-        console.warn('Scanner stop error:', error);
+        console.warn('⚠️ 停止扫描器时出错:', error);
       }
       scannerRef.current = null;
+    }
+
+    // 重置状态
+    setIsScannerInitialized(false);
+
+    // 清空容器内容
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.innerHTML = '';
     }
   };
 
