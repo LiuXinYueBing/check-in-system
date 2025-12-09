@@ -60,3 +60,91 @@ input, textarea {
 button {
   -webkit-tap-highlight-color: transparent;
 }
+
+/* HTML5 QR Code 扫描器样式修复 */
+#qr-scanner-container,
+#qr-test-container,
+#qr-scanner-container *,
+#qr-test-container * {
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+#qr-scanner-container div,
+#qr-test-container div,
+#qr-scanner-container span,
+#qr-test-container span,
+#qr-scanner-container button,
+#qr-test-container button,
+#qr-scanner-container select,
+#qr-test-container select,
+#qr-scanner-container option,
+#qr-test-container option,
+#qr-scanner-container label,
+#qr-test-container label {
+  transform: none !important;
+  animation: none !important;
+  transition: none !important;
+  -webkit-transform: none !important;
+  -webkit-animation: none !important;
+  -webkit-transition: none !important;
+}
+
+/* 全局通知弹窗样式 */
+.global-notification {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.global-notification-content {
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px;
+  max-width: 300px;
+  text-align: center;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.global-notification.success .global-notification-content {
+  border-left: 4px solid #10b981;
+}
+
+.global-notification.error .global-notification-content {
+  border-left: 4px solid #ef4444;
+}
+
+.global-notification.warning .global-notification-content {
+  border-left: 4px solid #f59e0b;
+}

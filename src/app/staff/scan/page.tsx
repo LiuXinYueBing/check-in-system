@@ -26,6 +26,15 @@ export default function StaffScanPage() {
     redeemed: 0,
     loading: true
   });
+  const [globalNotification, setGlobalNotification] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'warning';
+    message: string;
+  }>({
+    show: false,
+    type: 'error',
+    message: ''
+  });
   // 🔥 场次选择状态初始化和监听
   useEffect(() => {
     // 加载所有活动
@@ -42,11 +51,7 @@ export default function StaffScanPage() {
 
       if (error) {
         console.error('Fetch events error:', error);
-        toast({
-          title: "加载失败",
-          description: "无法获取活动列表",
-          variant: "destructive",
-        });
+        showGlobalNotification('error', '无法获取活动列表');
         return;
       }
 
@@ -72,11 +77,7 @@ export default function StaffScanPage() {
       }
     } catch (err) {
       console.error('Fetch events error:', err);
-      toast({
-        title: "加载失败",
-        description: "无法获取活动列表",
-        variant: "destructive",
-      });
+      showGlobalNotification('error', '无法获取活动列表');
     } finally {
       setLoadingEvents(false);
     }
@@ -141,6 +142,14 @@ export default function StaffScanPage() {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerId = 'qr-scanner-container';
   const { toast } = useToast();
+
+  // 全局通知函数
+  const showGlobalNotification = (type: 'success' | 'error' | 'warning', message: string) => {
+    setGlobalNotification({ show: true, type, message });
+    setTimeout(() => {
+      setGlobalNotification({ show: false, type: 'error', message: '' });
+    }, 3000);
+  };
 
   // 🔥 简化的摄像头权限检查
   const checkCameraPermission = async (): Promise<boolean> => {
@@ -219,11 +228,7 @@ export default function StaffScanPage() {
       console.log('✅ 扫描器初始化完成');
     } catch (error) {
       console.error('❌ Scanner start error:', error);
-      toast({
-        title: "扫描器启动失败",
-        description: `${error instanceof Error ? error.message : "请确保摄像头权限已开启"}`,
-        variant: "destructive",
-      });
+      showGlobalNotification('error', `扫描器启动失败：${error instanceof Error ? error.message : "请确保摄像头权限已开启"}`);
     }
   };
 
@@ -255,11 +260,7 @@ export default function StaffScanPage() {
 
       if (fetchError) {
         console.error('Fetch attendee error:', fetchError);
-        toast({
-          title: "查询失败",
-          description: "无法查询用户信息",
-          variant: "destructive",
-        });
+        showGlobalNotification('error', '查询失败，无法查询用户信息');
         // 2秒后重新开始扫描
         setTimeout(() => setScanning(true), 2000);
         return;
@@ -267,11 +268,7 @@ export default function StaffScanPage() {
 
       // 🔴 验证：不匹配 -> 场次错误
       if (scannedAttendee.event_id !== selectedEventId) {
-        toast({
-          title: "⚠️ 场次错误！",
-          description: "该用户属于其他活动，请核实！",
-          variant: "destructive",
-        });
+        showGlobalNotification('warning', '⚠️ 场次错误！该用户属于其他活动，请核实！');
         // 2秒后重新开始扫描
         setTimeout(() => setScanning(true), 2000);
         return;
@@ -284,11 +281,7 @@ export default function StaffScanPage() {
 
     } catch (err: any) {
       console.error('Scan fetch error:', err);
-      toast({
-        title: "查询失败",
-        description: "无法查询用户信息",
-        variant: "destructive",
-      });
+      showGlobalNotification('error', '查询失败，无法查询用户信息');
       // 2秒后重新开始扫描
       setTimeout(() => setScanning(true), 2000);
     }
@@ -313,11 +306,7 @@ export default function StaffScanPage() {
       setAttendee(data);
     } catch (err: any) {
       console.error('Fetch attendee error:', err);
-      toast({
-        title: "用户不存在",
-        description: "该二维码无效，请重新扫描",
-        variant: "destructive",
-      });
+      showGlobalNotification('error', '用户不存在，该二维码无效，请重新扫描');
       setTimeout(() => setScanning(true), 2000);
     } finally {
       setLoading(false);
@@ -339,11 +328,7 @@ export default function StaffScanPage() {
 
       if (error) throw error;
 
-      toast({
-        title: "入场成功",
-        description: `${attendee.name} 已成功入场`,
-        variant: "success",
-      });
+      showGlobalNotification('success', `${attendee.name} 已成功入场`);
 
       // 刷新数据
       await fetchAttendee(attendee.id);
@@ -351,11 +336,7 @@ export default function StaffScanPage() {
       fetchEventStats(selectedEventId);
     } catch (err: any) {
       console.error('Check-in error:', err);
-      toast({
-        title: "操作失败",
-        description: "请稍后重试",
-        variant: "destructive",
-      });
+      showGlobalNotification('error', '操作失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -376,11 +357,7 @@ export default function StaffScanPage() {
 
       if (error) throw error;
 
-      toast({
-        title: "核销成功",
-        description: `${attendee.name} 已完成核销`,
-        variant: "success",
-      });
+      showGlobalNotification('success', `${attendee.name} 已完成核销`);
 
       // 刷新数据
       await fetchAttendee(attendee.id);
@@ -388,11 +365,7 @@ export default function StaffScanPage() {
       fetchEventStats(selectedEventId);
     } catch (err: any) {
       console.error('Redeem error:', err);
-      toast({
-        title: "操作失败",
-        description: "请稍后重试",
-        variant: "destructive",
-      });
+      showGlobalNotification('error', '操作失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -716,6 +689,26 @@ export default function StaffScanPage() {
         )}
 
         {/* 底部导航 - 员工端不显示导航按钮 */}
+
+      {/* 全局通知弹窗 */}
+      {globalNotification.show && (
+        <div className={`global-notification ${globalNotification.type}`}>
+          <div className="global-notification-content">
+            <div className="text-lg font-medium mb-2">
+              {globalNotification.type === 'success' && '✅'}
+              {globalNotification.type === 'error' && '❌'}
+              {globalNotification.type === 'warning' && '⚠️'}
+              {' '}
+              {globalNotification.type === 'success' && '成功'}
+              {globalNotification.type === 'error' && '错误'}
+              {globalNotification.type === 'warning' && '警告'}
+            </div>
+            <div className="text-gray-700">
+              {globalNotification.message}
+            </div>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   );
