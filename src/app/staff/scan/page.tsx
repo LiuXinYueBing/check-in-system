@@ -141,6 +141,7 @@ export default function StaffScanPage() {
 
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerId = 'qr-scanner-container';
+  const styleIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
   // 全局通知函数
@@ -149,6 +150,53 @@ export default function StaffScanPage() {
     setTimeout(() => {
       setGlobalNotification({ show: false, type: 'error', message: '' });
     }, 3000);
+  };
+
+  // 🔥 修复摄像头选择器文字旋转问题
+  const fixCameraSelectorStyles = () => {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // 查找扫描器内的所有 select 和 button 元素
+    const elementsToFix = container.querySelectorAll('select, button, #qr-reader select, #qr-reader button');
+
+    elementsToFix.forEach((element) => {
+      const el = element as HTMLElement;
+      el.style.setProperty('transform', 'none', 'important');
+      el.style.setProperty('animation', 'none', 'important');
+      el.style.setProperty('transition', 'none', 'important');
+      el.style.setProperty('-webkit-transform', 'none', 'important');
+      el.style.setProperty('-webkit-animation', 'none', 'important');
+      el.style.setProperty('-webkit-transition', 'none', 'important');
+    });
+
+    // 同时修复可能的父容器
+    const parentElements = container.querySelectorAll('[id*="qr"], [class*="qr"]');
+    parentElements.forEach((element) => {
+      const el = element as HTMLElement;
+      el.style.setProperty('transform', 'none', 'important');
+      el.style.setProperty('animation', 'none', 'important');
+      el.style.setProperty('transition', 'none', 'important');
+    });
+  };
+
+  // 启动定时器持续修复样式
+  const startStyleFixInterval = () => {
+    // 立即执行一次
+    fixCameraSelectorStyles();
+
+    // 每500ms执行一次，持续修复样式
+    styleIntervalRef.current = setInterval(() => {
+      fixCameraSelectorStyles();
+    }, 500);
+  };
+
+  // 停止样式修复定时器
+  const stopStyleFixInterval = () => {
+    if (styleIntervalRef.current) {
+      clearInterval(styleIntervalRef.current);
+      styleIntervalRef.current = null;
+    }
   };
 
   // 🔥 简化的摄像头权限检查
@@ -174,11 +222,15 @@ export default function StaffScanPage() {
     } else {
       stopScanner();
     }
+  }, [scanning]);
 
+  // 组件卸载时清除定时器
+  useEffect(() => {
     return () => {
       stopScanner();
+      stopStyleFixInterval();
     };
-  }, [scanning]);
+  }, []);
 
   const startScanner = async () => {
     console.log('🔍 开始启动扫描器...');
@@ -226,6 +278,12 @@ export default function StaffScanPage() {
 
       scannerRef.current = scanner;
       console.log('✅ 扫描器初始化完成');
+
+      // 启动样式修复定时器
+      setTimeout(() => {
+        startStyleFixInterval();
+      }, 1000); // 延迟1秒启动，确保扫描器完全初始化
+
     } catch (error) {
       console.error('❌ Scanner start error:', error);
       showGlobalNotification('error', `扫描器启动失败：${error instanceof Error ? error.message : "请确保摄像头权限已开启"}`);
@@ -233,6 +291,9 @@ export default function StaffScanPage() {
   };
 
   const stopScanner = () => {
+    // 停止样式修复定时器
+    stopStyleFixInterval();
+
     if (scannerRef.current) {
       try {
         scannerRef.current.clear();
