@@ -380,29 +380,78 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
     }
   };
 
-  // 🔥 安全的摄像头切换函数
+  // 🔥 摄像头切换函数 - 按照你的方案
   const handleCameraSwitch = async (newCameraId: string) => {
-    if (!isMountedRef.current) return;
+    if (!scannerRef.current || !isMountedRef.current) return;
+
+    const scanner = scannerRef.current;
+    console.log('🔄 切换摄像头到:', newCameraId);
 
     try {
-      console.log('🔄 切换摄像头到:', newCameraId);
-      setSelectedCameraId(newCameraId);
-      setIsScanning(false);
+      // 方案1: 只用 stop()，不用 clear()，然后重新 start
+      console.log('⏹️ 停止当前摄像头...');
+      await scanner.stop();
 
-      cleanupScanner();
-
-      // 延迟后重新启动
-      setTimeout(() => {
-        if (isMountedRef.current && isActive) {
-          startScanner();
+      console.log('🎥 使用新摄像头重新启动...');
+      await scanner.start(
+        newCameraId,
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 }
+        },
+        (decodedText: string) => {
+          try {
+            console.log('✅ 扫描成功:', decodedText);
+            if (isMountedRef.current) {
+              onScanSuccess(decodedText);
+            }
+          } catch (e: any) {
+            console.error('❌ 处理扫描结果时出错:', e);
+            if (isMountedRef.current) {
+              setRuntimeError(`处理扫描结果失败: ${e?.message || '未知错误'}`);
+            }
+          }
+        },
+        (error: any) => {
+          // 只记录重要的扫描警告
+          if (error && !error.includes('No QR code found') && !error.includes('NotFoundException')) {
+            console.warn('⚠️ 扫描警告:', error);
+          }
         }
-      }, 1000);
+      );
+
+      // 更新选中的摄像头ID
+      if (isMountedRef.current) {
+        setSelectedCameraId(newCameraId);
+        console.log('✅ 摄像头切换成功');
+      }
 
     } catch (error: any) {
       console.error('❌ 切换摄像头失败:', error);
+
       if (isMountedRef.current) {
         setRuntimeError(`切换摄像头失败: ${error?.message || '未知错误'}`);
       }
+
+      // 如果失败，完全重建扫描器
+      console.log('🔄 切换失败，开始完全重建扫描器...');
+      scannerRef.current = null;
+      setIsScanning(false);
+
+      try {
+        scanner.clear();
+      } catch (e: any) {
+        // 忽略 clear() 错误
+        console.log('ℹ️ 忽略 clear() 错误:', e.message);
+      }
+
+      // 延迟后重新初始化
+      setTimeout(() => {
+        if (isMountedRef.current && isActive) {
+          setSelectedCameraId(newCameraId);
+          startScanner();
+        }
+      }, 500);
     }
   };
 
