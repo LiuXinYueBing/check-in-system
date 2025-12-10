@@ -1,19 +1,19 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/lib/supabase';
 import { Attendee, Event } from '@/types';
 import { QrCode, User, Clock, CheckCircle, XCircle, Gift, MapPin, ChevronDown } from 'lucide-react';
+import ScannerWrapper from '@/components/ScannerWrapper';
+import { ScannerErrorBoundary } from '@/components/ScannerErrorBoundary';
 
 export default function StaffScanPage() {
   const [attendee, setAttendee] = useState<Attendee | null>(null);
   const [loading, setLoading] = useState(false);
-  const [scanning, setScanning] = useState(true);
+  const [scanning, setScanning] = useState(false);
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEventId, setSelectedEventId] = useState('');
   const [selectedEventName, setSelectedEventName] = useState('');
@@ -35,9 +35,9 @@ export default function StaffScanPage() {
     type: 'error',
     message: ''
   });
-  // 🔥 场次选择状态初始化和监听
+
+  // 加载所有活动
   useEffect(() => {
-    // 加载所有活动
     fetchEvents();
   }, []);
 
@@ -46,34 +46,18 @@ export default function StaffScanPage() {
       console.log('🔄 开始获取活动列表...');
       setLoadingEvents(true);
 
-      // 检查Supabase配置
-      console.log('🔍 Supabase URL:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 20) + '...');
-      console.log('🔍 Supabase Anon Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...');
-
       const { data, error } = await supabase
         .from('events')
         .select('*')
         .order('created_at', { ascending: false });
 
-      console.log('📊 API响应:', { data: data?.length || 0, error });
-
       if (error) {
         console.error('❌ Fetch events error:', error);
-        console.error('❌ Error details:', {
-          message: error.message,
-          details: error.details,
-          hint: error.hint,
-          code: error.code
-        });
         showGlobalNotification('error', `无法获取活动列表: ${error.message}`);
         return;
       }
 
       console.log('✅ 成功获取活动列表，数量:', data?.length || 0);
-      if (data && data.length > 0) {
-        console.log('📋 活动列表:', data.map(e => ({ id: e.id, name: e.name })));
-      }
-
       setEvents(data || []);
 
       // 检查本地是否有缓存的活动
@@ -85,9 +69,7 @@ export default function StaffScanPage() {
         setSelectedEventId(cachedEventId);
         setSelectedEventName(cachedEventName);
         setShowEventSelector(false);
-        // 只有有缓存活动时才开始扫描
         setScanning(true);
-        // 加载本场统计数据
         fetchEventStats(cachedEventId);
       } else {
         console.log('📋 未找到缓存活动，显示选择器');
@@ -108,13 +90,10 @@ export default function StaffScanPage() {
     setSelectedEventName(eventName);
     setShowEventSelector(false);
 
-    // 持久化到localStorage
     localStorage.setItem('staff_selected_event_id', eventId);
     localStorage.setItem('staff_selected_event_name', `${eventName} - ${location}`);
 
-    // 选择活动后开始扫描
     setScanning(true);
-    // 加载本场统计数据
     fetchEventStats(eventId);
   };
 
@@ -158,12 +137,6 @@ export default function StaffScanPage() {
     setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: true });
   };
 
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
-  const containerId = 'qr-scanner-container';
-  const styleIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [isScannerInitialized, setIsScannerInitialized] = useState(false);
-  const { toast } = useToast();
-
   // 全局通知函数
   const showGlobalNotification = (type: 'success' | 'error' | 'warning', message: string) => {
     setGlobalNotification({ show: true, type, message });
@@ -172,198 +145,11 @@ export default function StaffScanPage() {
     }, 3000);
   };
 
-  // 🔥 修复摄像头选择器文字旋转问题 - 简化版本
-  const fixCameraSelectorStyles = () => {
-    console.log('🔧 简化样式修复...');
-
-    // 隐藏不需要的UI元素
-    const elementsToHide = [
-      'button', 'select', 'label'
-    ];
-
-    const container = document.getElementById(containerId);
-    if (!container) return;
-
-    elementsToHide.forEach(tagName => {
-      const elements = container.querySelectorAll(tagName);
-      elements.forEach((el) => {
-        (el as HTMLElement).style.display = 'none';
-      });
-    });
-
-    // 修复可能的旋转文字
-    const textElements = container.querySelectorAll('span, div, a');
-    textElements.forEach((el) => {
-      const element = el as HTMLElement;
-      const textContent = element.textContent?.trim() || '';
-
-      if (textContent.includes('Select Camera') || textContent.includes('Stop Scanning')) {
-        console.log(`✅ 修复文字旋转: ${textContent}`);
-        element.style.transform = 'none';
-        element.style.animation = 'none';
-        element.style.transition = 'none';
-      }
-    });
-
-    console.log('✅ 样式修复完成');
-  };
-
-  // 启动定时器持续修复样式
-  const startStyleFixInterval = () => {
-    console.log('⏰ 启动简化样式修复定时器...');
-    // 立即执行一次
-    fixCameraSelectorStyles();
-
-    // 每1秒执行一次，降低频率
-    styleIntervalRef.current = setInterval(() => {
-      fixCameraSelectorStyles();
-    }, 1000);
-  };
-
-  // 停止样式修复定时器
-  const stopStyleFixInterval = () => {
-    if (styleIntervalRef.current) {
-      console.log('⏹️ 停止样式修复定时器');
-      clearInterval(styleIntervalRef.current);
-      styleIntervalRef.current = null;
-    }
-  };
-
-  // 🔥 简化的摄像头权限检查
-  const checkCameraPermission = async (): Promise<boolean> => {
-    try {
-      // 检查浏览器是否支持getUserMedia
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('⚠️ 浏览器不支持 getUserMedia');
-        return true; // 让扫描器自己处理错误
-      }
-
-      console.log('✅ 浏览器支持摄像头，让扫描器处理权限');
-      return true; // 让 Html5QrcodeScanner 自己处理权限请求
-    } catch (error: any) {
-      console.warn('⚠️ 权限检查异常，让扫描器处理:', error);
-      return true; // 让扫描器自己处理
-    }
-  };
-
-  useEffect(() => {
-    if (scanning && !isScannerInitialized) {
-      startScanner();
-    } else if (!scanning && isScannerInitialized) {
-      stopScanner();
-    }
-  }, [scanning, isScannerInitialized]);
-
-  // 组件卸载时清除定时器
-  useEffect(() => {
-    return () => {
-      stopScanner();
-      stopStyleFixInterval();
-    };
-  }, []);
-
-  const startScanner = async () => {
-    console.log('🔍 开始启动扫描器...');
-
-    // 防止重复初始化
-    if (scannerRef.current || isScannerInitialized) {
-      console.warn('⚠️ 扫描器已经初始化，跳过重复初始化');
-      return;
-    }
-
-    // 检查容器是否存在
-    const container = document.getElementById(containerId);
-    if (!container) {
-      console.error('❌ 扫描器容器不存在:', containerId);
-      return;
-    }
-
-    try {
-      console.log('📹 检查摄像头权限...');
-      // 🔥 首先检查摄像头权限
-      const hasPermission = await checkCameraPermission();
-      if (!hasPermission) {
-        console.error('❌ 摄像头权限检查失败');
-        showGlobalNotification('error', '请允许访问摄像头');
-        return;
-      }
-
-      console.log('✅ 摄像头权限检查通过，初始化扫描器...');
-
-      // 清空容器内容，防止重复渲染
-      container.innerHTML = '';
-
-      const scanner = new Html5QrcodeScanner(
-        containerId,
-        {
-          fps: 10,
-          qrbox: { width: 250, height: 250 },
-          supportedScanTypes: [0], // 0 for camera
-          disableFlip: false
-        },
-        false
-      );
-
-      scanner.render(
-        (decodedText) => {
-          console.log('✅ 扫描成功:', decodedText);
-          handleScanSuccess(decodedText);
-        },
-        (error) => {
-          // 忽略扫描错误
-          if (error && !error.includes('No QR code found')) {
-            console.warn('⚠️ Scan error:', error);
-          }
-        }
-      );
-
-      scannerRef.current = scanner;
-      setIsScannerInitialized(true);
-      console.log('✅ 扫描器初始化完成');
-
-      // 启动样式修复定时器
-      setTimeout(() => {
-        startStyleFixInterval();
-      }, 1000); // 延迟1秒启动，确保扫描器完全初始化
-
-    } catch (error) {
-      console.error('❌ Scanner start error:', error);
-      setIsScannerInitialized(false);
-      showGlobalNotification('error', `扫描器启动失败：${error instanceof Error ? error.message : "请确保摄像头权限已开启"}`);
-    }
-  };
-
-  const stopScanner = () => {
-    console.log('🛑 停止扫描器...');
-    // 停止样式修复定时器
-    stopStyleFixInterval();
-
-    if (scannerRef.current) {
-      try {
-        scannerRef.current.clear();
-        console.log('✅ 扫描器已停止');
-      } catch (error) {
-        console.warn('⚠️ 停止扫描器时出错:', error);
-      }
-      scannerRef.current = null;
-    }
-
-    // 重置状态
-    setIsScannerInitialized(false);
-
-    // 清空容器内容
-    const container = document.getElementById(containerId);
-    if (container) {
-      container.innerHTML = '';
-    }
-  };
-
-  // 🔍 核心校验逻辑：检查该用户的event_id是否等于员工当前选中的event_id
+  // 处理扫描成功
   const handleScanSuccess = async (uuid: string) => {
     setScanning(false);
 
     try {
-      // 先查询用户信息
       const { data: scannedAttendee, error: fetchError } = await supabase
         .from('attendees')
         .select(`
@@ -376,56 +162,37 @@ export default function StaffScanPage() {
       if (fetchError) {
         console.error('Fetch attendee error:', fetchError);
         showGlobalNotification('error', '查询失败，无法查询用户信息');
-        // 2秒后重新开始扫描
-        setTimeout(() => setScanning(true), 2000);
+        setTimeout(() => {
+          setScanning(true);
+        }, 2000);
         return;
       }
 
-      // 🔴 验证：不匹配 -> 场次错误
       if (scannedAttendee.event_id !== selectedEventId) {
         showGlobalNotification('warning', '⚠️ 场次错误！该用户属于其他活动，请核实！');
-        // 2秒后重新开始扫描
-        setTimeout(() => setScanning(true), 2000);
+        setTimeout(() => {
+          setScanning(true);
+        }, 2000);
         return;
       }
 
-      // 🟢 验证：匹配 -> 显示用户信息和操作按钮
       setAttendee(scannedAttendee);
-      // 刷新本场统计数据
       fetchEventStats(selectedEventId);
 
     } catch (err: any) {
       console.error('Scan fetch error:', err);
       showGlobalNotification('error', '查询失败，无法查询用户信息');
-      // 2秒后重新开始扫描
-      setTimeout(() => setScanning(true), 2000);
+      setTimeout(() => {
+        setScanning(true);
+      }, 2000);
     }
   };
 
-  const fetchAttendee = async (id: string) => {
-    setLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('attendees')
-        .select(`
-          *,
-          event:events (*)
-        `)
-        .eq('id', id)
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      setAttendee(data);
-    } catch (err: any) {
-      console.error('Fetch attendee error:', err);
-      showGlobalNotification('error', '用户不存在，该二维码无效，请重新扫描');
-      setTimeout(() => setScanning(true), 2000);
-    } finally {
-      setLoading(false);
-    }
+  // 恢复扫描
+  const resumeScanning = () => {
+    console.log('🔄 恢复扫描状态');
+    setAttendee(null);
+    setScanning(true);
   };
 
   const handleCheckIn = async () => {
@@ -445,13 +212,24 @@ export default function StaffScanPage() {
 
       showGlobalNotification('success', `${attendee.name} 已成功入场`);
 
-      // 刷新数据
-      await fetchAttendee(attendee.id);
-      // 刷新本场统计数据
+      const { data } = await supabase
+        .from('attendees')
+        .select('*')
+        .eq('id', attendee.id)
+        .single();
+
+      if (data) {
+        setAttendee(data);
+      }
+
       fetchEventStats(selectedEventId);
     } catch (err: any) {
       console.error('Check-in error:', err);
       showGlobalNotification('error', '操作失败，请稍后重试');
+
+      setTimeout(() => {
+        resumeScanning();
+      }, 5000);
     } finally {
       setLoading(false);
     }
@@ -474,13 +252,24 @@ export default function StaffScanPage() {
 
       showGlobalNotification('success', `${attendee.name} 已完成核销`);
 
-      // 刷新数据
-      await fetchAttendee(attendee.id);
-      // 刷新本场统计数据
+      const { data } = await supabase
+        .from('attendees')
+        .select('*')
+        .eq('id', attendee.id)
+        .single();
+
+      if (data) {
+        setAttendee(data);
+      }
+
       fetchEventStats(selectedEventId);
     } catch (err: any) {
       console.error('Redeem error:', err);
       showGlobalNotification('error', '操作失败，请稍后重试');
+
+      setTimeout(() => {
+        resumeScanning();
+      }, 5000);
     } finally {
       setLoading(false);
     }
@@ -531,19 +320,6 @@ export default function StaffScanPage() {
     }
   };
 
-  const resetScanner = () => {
-    console.log('🔄 重置扫描器');
-    setAttendee(null);
-    setScanning(true);
-  };
-
-  const manualStartScanner = async () => {
-    console.log('🔧 手动启动扫描器');
-    stopScanner(); // 先停止现有扫描器
-    await new Promise(resolve => setTimeout(resolve, 500)); // 等待 500ms
-    setScanning(true); // 重新开始扫描
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-8">
       <div className="max-w-2xl mx-auto space-y-6">
@@ -556,7 +332,7 @@ export default function StaffScanPage() {
           <p className="text-gray-600">选择当前活动场次，扫码核验用户凭证</p>
         </div>
 
-        {/* 🔥 场次选择弹窗 */}
+        {/* 场次选择弹窗 */}
         {showEventSelector && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-auto p-6 space-y-4">
@@ -622,7 +398,7 @@ export default function StaffScanPage() {
           </div>
         )}
 
-        {/* 🔍 功能B: 本场数据统计 */}
+        {/* 本场数据统计 */}
         {selectedEventId && !showEventSelector && (
           <div className="bg-white border rounded-xl shadow-lg p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">本场数据</h3>
@@ -655,44 +431,17 @@ export default function StaffScanPage() {
         )}
 
         {/* 扫描区域 */}
-        {!attendee && !showEventSelector && (
-          <Card className="shadow-xl border-0">
-            <CardHeader>
-              <CardTitle className="text-center">
-                {scanning ? '请扫描二维码' : '扫描完成'}
-              </CardTitle>
-              <CardDescription className="text-center">
-                {scanning
-                  ? '将用户二维码对准扫描框'
-                  : '扫描成功，正在获取用户信息'
-                }
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {scanning ? (
-                <div className="flex flex-col items-center space-y-4">
-                  <div id={containerId} className="w-full max-w-sm" />
-                  <Button
-                    onClick={manualStartScanner}
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                  >
-                    🔧 重启扫描器
-                  </Button>
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-                  <p className="mt-4 text-gray-600">正在处理...</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {!attendee && !showEventSelector && scanning && (
+          <ScannerErrorBoundary>
+            <ScannerWrapper
+              onScanSuccess={handleScanSuccess}
+              isActive={scanning}
+            />
+          </ScannerErrorBoundary>
         )}
 
         {/* 如果没有选择活动，显示提示 */}
-        {!attendee && showEventSelector === false && scanning === false && (
+        {!attendee && !showEventSelector && !scanning && (
           <Card className="shadow-xl border-0">
             <CardContent className="text-center py-8">
               <p className="text-gray-600 mb-4">请先选择活动场次</p>
@@ -706,7 +455,6 @@ export default function StaffScanPage() {
         {/* 用户信息区域 */}
         {attendee && (
           <div className="space-y-4">
-            {/* 用户信息卡片 */}
             <Card className="shadow-xl border-0 overflow-hidden">
               <CardHeader className="bg-gradient-to-r from-primary-50 to-indigo-50">
                 <div className="flex items-center justify-between">
@@ -726,7 +474,6 @@ export default function StaffScanPage() {
               </CardHeader>
 
               <CardContent className="space-y-6 pt-6">
-                {/* 状态信息 */}
                 <div className="space-y-3">
                   {(() => {
                     const statusInfo = getStatusInfo(attendee.status);
@@ -744,7 +491,6 @@ export default function StaffScanPage() {
                     );
                   })()}
 
-                  {/* 时间信息 */}
                   <div className="grid grid-cols-2 gap-3 text-sm">
                     <div className="bg-blue-50 p-3 rounded-lg">
                       <p className="text-blue-600 text-xs mb-1">报名时间</p>
@@ -766,7 +512,6 @@ export default function StaffScanPage() {
                   </div>
                 </div>
 
-                {/* 操作按钮 */}
                 <div className="space-y-3">
                   {getStatusInfo(attendee.status).action === 'confirmCheckIn' && (
                     <Button
@@ -791,7 +536,7 @@ export default function StaffScanPage() {
                   )}
 
                   <Button
-                    onClick={resetScanner}
+                    onClick={resumeScanning}
                     variant="outline"
                     className="w-full h-12"
                   >
@@ -803,27 +548,25 @@ export default function StaffScanPage() {
           </div>
         )}
 
-        {/* 底部导航 - 员工端不显示导航按钮 */}
-
-      {/* 全局通知弹窗 */}
-      {globalNotification.show && (
-        <div className={`global-notification ${globalNotification.type}`}>
-          <div className="global-notification-content">
-            <div className="text-lg font-medium mb-2">
-              {globalNotification.type === 'success' && '✅'}
-              {globalNotification.type === 'error' && '❌'}
-              {globalNotification.type === 'warning' && '⚠️'}
-              {' '}
-              {globalNotification.type === 'success' && '成功'}
-              {globalNotification.type === 'error' && '错误'}
-              {globalNotification.type === 'warning' && '警告'}
-            </div>
-            <div className="text-gray-700">
-              {globalNotification.message}
+        {/* 全局通知弹窗 */}
+        {globalNotification.show && (
+          <div className={`global-notification ${globalNotification.type}`}>
+            <div className="global-notification-content">
+              <div className="text-lg font-medium mb-2">
+                {globalNotification.type === 'success' && '✅'}
+                {globalNotification.type === 'error' && '❌'}
+                {globalNotification.type === 'warning' && '⚠️'}
+                {' '}
+                {globalNotification.type === 'success' && '成功'}
+                {globalNotification.type === 'error' && '错误'}
+                {globalNotification.type === 'warning' && '警告'}
+              </div>
+              <div className="text-gray-700">
+                {globalNotification.message}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </div>
     </div>
   );

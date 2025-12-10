@@ -69,47 +69,26 @@ button {
   transition: none !important;
 }
 
-/* 隐藏html5-qrcode库的原生UI元素 */
-#qr-scanner-container button,
-#qr-test-container button,
-#qr-scanner-container select,
-#qr-test-container select,
-#qr-scanner-container label,
-#qr-test-container label,
-#qr-scanner-container #qr-reader__dashboard_section_csr,
-#qr-test-container #qr-reader__dashboard_section_csr,
-#qr-scanner-container .qr-reader__dashboard_section_csr,
-#qr-test-container .qr-reader__dashboard_section_csr,
-#qr-scanner-container .qr-reader__header,
-#qr-test-container .qr-reader__header,
-#qr-scanner-container .qr-reader__status,
-#qr-test-container .qr-reader__status,
-#qr-scanner-container [id*="poweredby"],
-#qr-test-container [id*="poweredby"],
-#qr-scanner-container [class*="poweredby"],
-#qr-test-container [class*="poweredby"],
-#qr-scanner-container [id*="zoom"],
-#qr-test-container [id*="zoom"],
-#qr-scanner-container [class*="zoom"],
-#qr-test-container [class*="zoom"] {
-  display: none !important;
-  visibility: hidden !important;
+/* Html5Qrcode容器样式 - 保持简洁，只美化video元素 */
+#qr-scanner-container,
+#qr-test-container {
+  position: relative;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+  overflow: hidden;
 }
 
-/* 修复摄像头选择器文字旋转问题 */
-#qr-scanner-container span,
-#qr-test-container span,
-#qr-scanner-container div,
-#qr-test-container div,
-#qr-scanner-container a,
-#qr-test-container a {
-  transform: none !important;
-  animation: none !important;
-  transition: none !important;
-  -webkit-transform: none !important;
-  -webkit-animation: none !important;
-  -webkit-transition: none !important;
+#qr-scanner-container video,
+#qr-test-container video {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  border-radius: 8px !important;
+  object-fit: cover;
 }
+
+/* 现在使用Html5Qrcode，不需要复杂的隐藏规则 */
 
 /* 全局通知弹窗样式 */
 .global-notification {
