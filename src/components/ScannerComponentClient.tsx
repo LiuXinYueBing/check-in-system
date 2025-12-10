@@ -44,6 +44,8 @@ const loadHtml5Qrcode = async (): Promise<any> => {
 };
 
 export default function ScannerComponentClient({ onScanSuccess, isActive }: ScannerComponentProps) {
+  console.log('🚀 ScannerComponentClient 组件渲染开始', { isActive });
+
   // 扫描器相关状态
   const scannerRef = useRef<any>(null);
   const containerId = 'qr-scanner-container';
@@ -112,23 +114,41 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
 
   // 🔥 组件挂载时初始化
   useEffect(() => {
+    console.log('🔄 ScannerComponentClient useEffect 触发');
+
     // 确保只在客户端运行
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') {
+      console.log('❌ 检测到SSR环境，跳过初始化');
+      return;
+    }
 
     const initializeComponent = async () => {
       try {
-        console.log('🔄 初始化扫码组件...');
+        console.log('🔄 开始初始化扫码组件...');
+        console.log('📊 环境信息:', {
+          userAgent: navigator.userAgent,
+          platform: navigator.platform,
+          hasMediaDevices: !!navigator.mediaDevices,
+          hasGetUserMedia: !!navigator.mediaDevices?.getUserMedia
+        });
 
         // 预加载库
+        console.log('📦 开始加载 html5-qrcode 库...');
         await loadHtml5Qrcode();
 
         if (isMountedRef.current) {
+          console.log('✅ 库加载成功，更新状态');
           setIsLibraryReady(true);
           setLibraryError('');
           console.log('✅ 扫码库预加载完成');
         }
       } catch (error: any) {
         console.error('❌ 扫码库加载失败:', error);
+        console.error('❌ 错误详情:', {
+          name: error?.name,
+          message: error?.message,
+          stack: error?.stack
+        });
         if (isMountedRef.current) {
           setLibraryError(`扫码库加载失败: ${error?.message || '未知错误'}`);
           setIsLibraryReady(false);
@@ -136,11 +156,12 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       }
     };
 
+    console.log('🚀 开始执行初始化...');
     initializeComponent();
 
     // 组件卸载时清理
     return () => {
-      console.log('🗑️ ScannerComponentClient 卸载');
+      console.log('🗑️ ScannerComponentClient 卸载，清理资源');
       isMountedRef.current = false;
       cleanupScanner().catch(console.error);
     };
@@ -148,7 +169,20 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
 
   // 🔥 扫描器控制逻辑 - 修复依赖循环问题
   useEffect(() => {
-    if (!isMountedRef.current || !isLibraryReady) return;
+    console.log('🎛️ 扫描器控制逻辑触发', {
+      isActive,
+      isLibraryReady,
+      isScannerInitialized,
+      isInitializing: isInitializingRef.current
+    });
+
+    if (!isMountedRef.current || !isLibraryReady) {
+      console.log('⏸️ 组件未准备好，跳过控制逻辑', {
+        isMounted: isMountedRef.current,
+        isLibraryReady
+      });
+      return;
+    }
 
     const controlScanner = async () => {
       // 防止重复初始化
@@ -159,16 +193,30 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
 
       try {
         if (isActive && !isScannerInitialized) {
-          console.log('🎯 扫描器激活，开始初始化...');
+          console.log('🎯 扫描器激活，开始初始化...', {
+            isActive,
+            isScannerInitialized
+          });
           isInitializingRef.current = true;
           await startScanner();
         } else if (!isActive && isScannerInitialized) {
           console.log('⏹️ 扫描器停用，开始清理...');
           isInitializingRef.current = true;
           await cleanupScanner();
+        } else {
+          console.log('📊 状态无需变更', {
+            isActive,
+            isScannerInitialized,
+            isInitializing: isInitializingRef.current
+          });
         }
       } catch (error: any) {
         console.error('❌ 扫描器状态管理错误:', error);
+        console.error('❌ 错误详情:', {
+          name: error?.name,
+          message: error?.message,
+          stack: error?.stack
+        });
         if (isMountedRef.current) {
           setRuntimeError(`扫描器状态管理错误: ${error?.message || '未知错误'}`);
         }
