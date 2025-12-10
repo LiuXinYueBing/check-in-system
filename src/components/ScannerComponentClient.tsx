@@ -61,49 +61,140 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
   // 组件挂载状态和资源锁
   const isMountedRef = useRef(true);
   const isInitializingRef = useRef(false);
+  const isStoppingRef = useRef(false);
   const cleanupRef = useRef<Promise<void> | null>(null);
+  const scannerStateRef = useRef<'idle' | 'starting' | 'running' | 'stopping'>('idle');
 
   // 🔥 安全的资源清理函数
   const cleanupScanner = useCallback(async () => {
+    // 防止重复清理
+    if (isStoppingRef.current) {
+      console.log('⏳ 扫描器正在停止中，跳过重复清理');
+      return;
+    }
+
     if (cleanupRef.current) {
+      console.log('⏳ 清理正在进行中，等待完成...');
       await cleanupRef.current;
     }
+
+    // 设置停止标志
+    isStoppingRef.current = true;
+    scannerStateRef.current = 'stopping';
 
     cleanupRef.current = (async () => {
       console.log('🧹 开始清理扫码器资源...');
 
-      if (scannerRef.current) {
-        try {
-          // 停止扫描
-          await scannerRef.current.stop();
-          console.log('✅ 摄像头已停止');
-        } catch (error: any) {
-          console.warn('⚠️ 停止摄像头时出错:', error.message);
+      const scanner = scannerRef.current;
+      if (!scanner) {
+        console.log('ℹ️ 扫描器实例不存在，跳过清理');
+        scannerStateRef.current = 'idle';
+        isStoppingRef.current = false;
+        return;
+      }
+
+      try {
+        // 检查扫描器状态
+        console.log('🔍 检查扫描器状态...', {
+          hasScanner: !!scanner,
+          scannerType: typeof scanner,
+          hasStop: typeof scanner.stop === 'function',
+          hasClear: typeof scanner.clear === 'function'
+        });
+
+        // 检查是否已经在清理中
+        if (scanner.isScanning !== undefined && scanner.isScanning === false) {
+          console.log('ℹ️ 扫描器已经停止，跳过stop()调用');
+        } else {
+          // 尝试停止扫描
+          console.log('⏹️ 尝试停止扫描器...');
+          try {
+            if (typeof scanner.stop === 'function') {
+              await scanner.stop();
+              console.log('✅ 摄像头已停止');
+            } else {
+              console.warn('⚠️ scanner.stop 不是函数，跳过停止操作');
+            }
+          } catch (stopError: any) {
+            console.warn('⚠️ 停止摄像头时出错:', stopError.message);
+            console.warn('⚠️ 停止错误详情:', {
+              name: stopError.name,
+              message: stopError.message,
+              isDOMError: stopError.message.includes('removeChild') ||
+                        stopError.message.includes('Node') ||
+                        stopError.message.includes('DOM')
+            });
+
+            // DOM错误通常是安全的，可以继续
+            if (stopError.message.includes('removeChild') ||
+                stopError.message.includes('Node') ||
+                stopError.message.includes('DOM')) {
+              console.log('✅ DOM清理错误是预期的，继续执行clear()');
+            }
+          }
         }
 
+        // 清理资源 - 总是尝试
+        console.log('🧹 尝试清理扫描器资源...');
         try {
-          // 清理资源
-          await scannerRef.current.clear();
-          console.log('✅ 扫描器资源已清理');
-        } catch (error: any) {
-          console.warn('⚠️ 清理扫描器时出错:', error.message);
+          if (typeof scanner.clear === 'function') {
+            await scanner.clear();
+            console.log('✅ 扫描器资源已清理');
+          } else {
+            console.warn('⚠️ scanner.clear 不是函数，跳过清理操作');
+          }
+        } catch (clearError: any) {
+          console.warn('⚠️ 清理扫描器时出错:', clearError.message);
+          console.warn('⚠️ 清理错误详情:', {
+            name: clearError.name,
+            message: clearError.message,
+            isDOMError: clearError.message.includes('removeChild') ||
+                      clearError.message.includes('Node') ||
+                      clearError.message.includes('DOM')
+          });
+
+          // DOM错误通常可以忽略
+          if (clearError.message.includes('removeChild') ||
+              clearError.message.includes('Node') ||
+              clearError.message.includes('DOM')) {
+            console.log('✅ DOM清理错误是预期的，清理完成');
+          }
         }
 
+      } catch (error: any) {
+        console.error('❌ 扫描器清理过程中发生意外错误:', error);
+      } finally {
+        // 无论是否出错，都要重置引用
         scannerRef.current = null;
+        console.log('✅ 扫描器引用已重置');
       }
 
-      // 清空容器
-      const container = document.getElementById(containerId);
-      if (container) {
-        container.innerHTML = '';
+      // 安全地清空容器
+      try {
+        const container = document.getElementById(containerId);
+        if (container) {
+          console.log('🧹 清理DOM容器...');
+          container.innerHTML = '';
+          console.log('✅ DOM容器已清理');
+        } else {
+          console.log('ℹ️ 容器不存在，跳过DOM清理');
+        }
+      } catch (domError: any) {
+        console.warn('⚠️ 清理DOM容器时出错:', domError.message);
       }
 
+      // 重置状态
       if (isMountedRef.current) {
+        console.log('🔄 重置组件状态...');
         setIsScannerInitialized(false);
         setHasActiveCamera(false);
         setCameraError('');
         setRuntimeError('');
       }
+
+      // 重置清理状态
+      scannerStateRef.current = 'idle';
+      isStoppingRef.current = false;
 
       console.log('✅ 扫码器资源清理完成');
       cleanupRef.current = null;
@@ -246,6 +337,15 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       return;
     }
 
+    if (isStoppingRef.current) {
+      console.log('⏳ 扫描器正在停止中，稍后再试');
+      return;
+    }
+
+    // 设置启动状态
+    isInitializingRef.current = true;
+    scannerStateRef.current = 'starting';
+
     try {
       console.log('🔍 开始启动扫描器...');
       setRuntimeError('');
@@ -378,6 +478,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       if (isMountedRef.current) {
         setIsScannerInitialized(true);
         setHasActiveCamera(true);
+        scannerStateRef.current = 'running';
         console.log('✅ 状态更新完成 - isScannerInitialized: true, hasActiveCamera: true');
       }
       console.log('✅ 扫描器启动成功！');
@@ -400,6 +501,12 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
         setHasActiveCamera(false);
         setCameraError(error.message || '扫描器启动失败，请检查摄像头权限设置');
       }
+
+      // 重置状态
+      scannerStateRef.current = 'idle';
+    } finally {
+      // 确保初始化标志被重置
+      isInitializingRef.current = false;
     }
   };
 
