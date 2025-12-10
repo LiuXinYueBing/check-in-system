@@ -146,13 +146,16 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
     };
   }, [cleanupScanner]);
 
-  // 🔥 扫描器控制逻辑 - 防止重复初始化
+  // 🔥 扫描器控制逻辑 - 修复依赖循环问题
   useEffect(() => {
     if (!isMountedRef.current || !isLibraryReady) return;
 
     const controlScanner = async () => {
       // 防止重复初始化
-      if (isInitializingRef.current) return;
+      if (isInitializingRef.current) {
+        console.log('⏳ 扫描器正在初始化中，跳过...');
+        return;
+      }
 
       try {
         if (isActive && !isScannerInitialized) {
@@ -175,11 +178,25 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
     };
 
     controlScanner();
-  }, [isActive, isScannerInitialized, isLibraryReady, cleanupScanner]);
+  }, [isActive, isLibraryReady]); // 移除 isScannerInitialized 避免循环
 
   // 🔥 增强的扫描器启动函数
   const startScanner = async () => {
-    if (!isMountedRef.current || !isLibraryReady || isInitializingRef.current) return;
+    // 防止重复初始化
+    if (!isMountedRef.current || !isLibraryReady) {
+      console.log('❌ 组件未准备好，跳过启动');
+      return;
+    }
+
+    if (isInitializingRef.current) {
+      console.log('⏳ 扫描器正在初始化中，跳过启动');
+      return;
+    }
+
+    if (isScannerInitialized) {
+      console.log('⚠️ 扫描器已初始化，跳过重复启动');
+      return;
+    }
 
     try {
       console.log('🔍 开始启动扫描器...');
@@ -313,6 +330,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       if (isMountedRef.current) {
         setIsScannerInitialized(true);
         setHasActiveCamera(true);
+        console.log('✅ 状态更新完成 - isScannerInitialized: true, hasActiveCamera: true');
       }
       console.log('✅ 扫描器启动成功！');
 
@@ -365,43 +383,90 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
 
   // 🔥 权限请求函数
   const handlePermissionRequest = async () => {
-    if (!isMountedRef.current || isInitializingRef.current) return;
+    if (!isMountedRef.current) return;
 
     try {
       console.log('🔐 手动请求摄像头权限...');
       setRuntimeError('');
+      setCameraError('');
+
+      // 重置状态
+      setIsScannerInitialized(false);
+      setHasActiveCamera(false);
+      isInitializingRef.current = false;
 
       const Html5QrcodeClass = await loadHtml5Qrcode();
       if (!Html5QrcodeClass || !isMountedRef.current) return;
 
+      console.log('📹 获取摄像头列表...');
       const cameras = await Html5QrcodeClass.getCameras();
+      console.log('✅ 成功获取摄像头列表:', cameras);
+
       if (cameras && cameras.length > 0 && isMountedRef.current) {
         console.log('✅ 权限获取成功，启动扫描器...');
-        await startScanner();
+
+        // 更新摄像头列表
+        const cameraList = cameras.map((camera: any, index: number) => {
+          let label = camera.label || `摄像头 ${index + 1}`;
+          if (camera.label) {
+            const lowerLabel = camera.label.toLowerCase();
+            if (lowerLabel.includes('back') || lowerLabel.includes('environment')) {
+              label = `后置摄像头 ${index + 1}`;
+            } else if (lowerLabel.includes('front') || lowerLabel.includes('user')) {
+              label = `前置摄像头 ${index + 1}`;
+            }
+          }
+          return { id: camera.id, label };
+        });
+        setAvailableCameras(cameraList);
+
+        // 延迟启动扫描器
+        setTimeout(() => {
+          if (isMountedRef.current && isActive) {
+            startScanner();
+          }
+        }, 100);
       } else if (isMountedRef.current) {
-        setCameraError('无法获取摄像头权限，请检查浏览器设置');
+        setCameraError('未找到可用的摄像头设备');
       }
     } catch (error: any) {
       console.error('❌ 权限请求失败:', error);
+      let errorMessage = '无法访问摄像头';
+      if (error.name === 'NotAllowedError') {
+        errorMessage = '摄像头权限被拒绝，请点击地址栏左侧的摄像头图标并选择"允许"';
+      } else if (error.name === 'NotFoundError') {
+        errorMessage = '未找到摄像头设备，请确保设备有可用的摄像头';
+      } else if (error.name === 'NotReadableError') {
+        errorMessage = '摄像头被其他应用占用，请关闭其他使用摄像头的应用';
+      } else {
+        errorMessage = `权限请求失败: ${error?.message || '未知错误'}`;
+      }
+
       if (isMountedRef.current) {
-        setCameraError(`权限请求失败: ${error?.message || '未知错误'}`);
+        setCameraError(errorMessage);
       }
     }
   };
 
   // 🔥 重启函数
   const handleRestart = async () => {
-    if (!isMountedRef.current || isInitializingRef.current) return;
+    if (!isMountedRef.current) return;
 
     try {
       console.log('🔄 重启扫描器...');
       setRuntimeError('');
       setCameraError('');
 
+      // 强制重置状态
+      setIsScannerInitialized(false);
+      setHasActiveCamera(false);
+      isInitializingRef.current = false;
+
       await cleanupScanner();
 
       setTimeout(() => {
-        if (isMountedRef.current && !isInitializingRef.current) {
+        if (isMountedRef.current && isActive && !isInitializingRef.current) {
+          console.log('🔄 延迟重启扫描器...');
           startScanner();
         }
       }, 500);
