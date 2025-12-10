@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Attendee, Event } from '@/types';
-import { QrCode, User, Clock, CheckCircle, XCircle, Gift, MapPin, ChevronDown } from 'lucide-react';
+import { QrCode, User, Clock, CheckCircle, XCircle, Gift, MapPin, ChevronDown, Settings } from 'lucide-react';
 import ScannerWrapper from '@/components/ScannerWrapper';
 import { ScannerErrorBoundary } from '@/components/ScannerErrorBoundary';
 
@@ -35,6 +35,34 @@ export default function StaffScanPage() {
     type: 'error',
     message: ''
   });
+
+  // 自动继续扫描设置
+  const [autoContinueScan, setAutoContinueScan] = useState(true);
+  const [waitTime, setWaitTime] = useState(2);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // 加载设置
+  useEffect(() => {
+    const savedAutoContinue = localStorage.getItem('staff_auto_continue_scan');
+    const savedWaitTime = localStorage.getItem('staff_wait_time');
+
+    if (savedAutoContinue !== null) {
+      setAutoContinueScan(savedAutoContinue === 'true');
+    }
+
+    if (savedWaitTime !== null) {
+      setWaitTime(parseInt(savedWaitTime, 10));
+    }
+  }, []);
+
+  // 保存设置
+  useEffect(() => {
+    localStorage.setItem('staff_auto_continue_scan', autoContinueScan.toString());
+  }, [autoContinueScan]);
+
+  useEffect(() => {
+    localStorage.setItem('staff_wait_time', waitTime.toString());
+  }, [waitTime]);
 
   // 加载所有活动
   useEffect(() => {
@@ -223,6 +251,13 @@ export default function StaffScanPage() {
       }
 
       fetchEventStats(selectedEventId);
+
+      // 自动继续扫描
+      if (autoContinueScan) {
+        setTimeout(() => {
+          resumeScanning();
+        }, waitTime * 1000);
+      }
     } catch (err: any) {
       console.error('Check-in error:', err);
       showGlobalNotification('error', '操作失败，请稍后重试');
@@ -263,6 +298,13 @@ export default function StaffScanPage() {
       }
 
       fetchEventStats(selectedEventId);
+
+      // 自动继续扫描
+      if (autoContinueScan) {
+        setTimeout(() => {
+          resumeScanning();
+        }, waitTime * 1000);
+      }
     } catch (err: any) {
       console.error('Redeem error:', err);
       showGlobalNotification('error', '操作失败，请稍后重试');
@@ -394,6 +436,67 @@ export default function StaffScanPage() {
                 <ChevronDown className="w-4 h-4 mr-1" />
                 切换活动
               </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 自动继续扫描设置 */}
+        {selectedEventId && !showEventSelector && (
+          <div className="bg-gray-50 border rounded-xl shadow-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Settings className="w-4 h-4 text-gray-600" />
+                <h3 className="text-sm font-semibold text-gray-900">自动继续扫描设置</h3>
+              </div>
+              <Button
+                onClick={() => setShowSettings(!showSettings)}
+                variant="ghost"
+                size="sm"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                {showSettings ? '收起' : '展开'}
+              </Button>
+            </div>
+
+            <div className={`space-y-3 ${showSettings ? 'block' : 'hidden'}`}>
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-gray-700">扫码后自动继续</label>
+                <button
+                  onClick={() => setAutoContinueScan(!autoContinueScan)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    autoContinueScan ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      autoContinueScan ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {autoContinueScan && (
+                <div className="flex items-center justify-between">
+                  <label className="text-sm text-gray-700">等待时间</label>
+                  <select
+                    value={waitTime}
+                    onChange={(e) => setWaitTime(parseInt(e.target.value, 10))}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value={1}>1秒</option>
+                    <option value={2}>2秒</option>
+                    <option value={3}>3秒</option>
+                    <option value={5}>5秒</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="text-xs text-gray-500 bg-white rounded p-2">
+                💡 {autoContinueScan
+                  ? `操作完成后将等待${waitTime}秒自动继续扫描`
+                  : '操作完成后需要手动点击"继续扫描"按钮'
+                }
+              </div>
             </div>
           </div>
         )}
