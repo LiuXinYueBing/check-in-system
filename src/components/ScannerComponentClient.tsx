@@ -49,8 +49,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
   // 扫描器相关状态
   const scannerRef = useRef<any>(null);
   const containerId = 'qr-scanner-container';
-  const [isScannerInitialized, setIsScannerInitialized] = useState(false);
-  const [hasActiveCamera, setHasActiveCamera] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
   const [availableCameras, setAvailableCameras] = useState<Array<{id: string, label: string}>>([]);
   const [selectedCameraId, setSelectedCameraId] = useState<string>('');
   const [cameraError, setCameraError] = useState<string>('');
@@ -58,152 +57,38 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
   const [isLibraryReady, setIsLibraryReady] = useState(false);
   const [libraryError, setLibraryError] = useState<string>('');
 
-  // 组件挂载状态和资源锁
+  // 组件挂载状态
   const isMountedRef = useRef(true);
-  const isInitializingRef = useRef(false);
-  const isStoppingRef = useRef(false);
-  const cleanupRef = useRef<Promise<void> | null>(null);
-  const scannerStateRef = useRef<'idle' | 'starting' | 'running' | 'stopping'>('idle');
 
-  // 🔥 安全的资源清理函数
-  const cleanupScanner = useCallback(async () => {
-    // 防止重复清理
-    if (isStoppingRef.current) {
-      console.log('⏳ 扫描器正在停止中，跳过重复清理');
-      return;
-    }
-
-    if (cleanupRef.current) {
-      console.log('⏳ 清理正在进行中，等待完成...');
-      await cleanupRef.current;
-    }
-
-    // 设置停止标志
-    isStoppingRef.current = true;
-    scannerStateRef.current = 'stopping';
-
-    cleanupRef.current = (async () => {
-      console.log('🧹 开始清理扫码器资源...');
-
+  // 🔥 简化的清理函数 - 按照你的方案
+  const cleanupScanner = useCallback(() => {
+    if (scannerRef.current) {
       const scanner = scannerRef.current;
-      if (!scanner) {
-        console.log('ℹ️ 扫描器实例不存在，跳过清理');
-        scannerStateRef.current = 'idle';
-        isStoppingRef.current = false;
-        return;
-      }
+      scannerRef.current = null;
+      setIsScanning(false);
 
-      try {
-        // 检查扫描器状态
-        console.log('🔍 检查扫描器状态...', {
-          hasScanner: !!scanner,
-          scannerType: typeof scanner,
-          hasStop: typeof scanner.stop === 'function',
-          hasClear: typeof scanner.clear === 'function'
-        });
+      console.log('🧹 开始清理扫描器...');
 
-        // 检查是否已经在清理中
-        if (scanner.isScanning !== undefined && scanner.isScanning === false) {
-          console.log('ℹ️ 扫描器已经停止，跳过stop()调用');
-        } else {
-          // 尝试停止扫描
-          console.log('⏹️ 尝试停止扫描器...');
-          try {
-            if (typeof scanner.stop === 'function') {
-              await scanner.stop();
-              console.log('✅ 摄像头已停止');
-            } else {
-              console.warn('⚠️ scanner.stop 不是函数，跳过停止操作');
-            }
-          } catch (stopError: any) {
-            console.warn('⚠️ 停止摄像头时出错:', stopError.message);
-            console.warn('⚠️ 停止错误详情:', {
-              name: stopError.name,
-              message: stopError.message,
-              isDOMError: stopError.message.includes('removeChild') ||
-                        stopError.message.includes('Node') ||
-                        stopError.message.includes('DOM')
-            });
-
-            // DOM错误通常是安全的，可以继续
-            if (stopError.message.includes('removeChild') ||
-                stopError.message.includes('Node') ||
-                stopError.message.includes('DOM')) {
-              console.log('✅ DOM清理错误是预期的，继续执行clear()');
-            }
-          }
-        }
-
-        // 清理资源 - 总是尝试
-        console.log('🧹 尝试清理扫描器资源...');
+      // 先调用 stop() 再调用 clear()
+      scanner.stop().catch((error: any) => {
+        console.warn('⚠️ stop() 调用出错，但继续执行 clear():', error.message);
+      }).finally(() => {
         try {
-          if (typeof scanner.clear === 'function') {
-            await scanner.clear();
-            console.log('✅ 扫描器资源已清理');
+          scanner.clear();
+          console.log('✅ 扫描器清理完成');
+        } catch (e: any) {
+          // 忽略 removeChild 错误
+          if (e.message && e.message.includes('removeChild')) {
+            console.log('ℹ️ 忽略 removeChild 错误，这是正常的清理过程');
           } else {
-            console.warn('⚠️ scanner.clear 不是函数，跳过清理操作');
-          }
-        } catch (clearError: any) {
-          console.warn('⚠️ 清理扫描器时出错:', clearError.message);
-          console.warn('⚠️ 清理错误详情:', {
-            name: clearError.name,
-            message: clearError.message,
-            isDOMError: clearError.message.includes('removeChild') ||
-                      clearError.message.includes('Node') ||
-                      clearError.message.includes('DOM')
-          });
-
-          // DOM错误通常可以忽略
-          if (clearError.message.includes('removeChild') ||
-              clearError.message.includes('Node') ||
-              clearError.message.includes('DOM')) {
-            console.log('✅ DOM清理错误是预期的，清理完成');
+            console.warn('⚠️ clear() 调用出错:', e.message);
           }
         }
-
-      } catch (error: any) {
-        console.error('❌ 扫描器清理过程中发生意外错误:', error);
-      } finally {
-        // 无论是否出错，都要重置引用
-        scannerRef.current = null;
-        console.log('✅ 扫描器引用已重置');
-      }
-
-      // 安全地清空容器
-      try {
-        const container = document.getElementById(containerId);
-        if (container) {
-          console.log('🧹 清理DOM容器...');
-          container.innerHTML = '';
-          console.log('✅ DOM容器已清理');
-        } else {
-          console.log('ℹ️ 容器不存在，跳过DOM清理');
-        }
-      } catch (domError: any) {
-        console.warn('⚠️ 清理DOM容器时出错:', domError.message);
-      }
-
-      // 重置状态
-      if (isMountedRef.current) {
-        console.log('🔄 重置组件状态...');
-        setIsScannerInitialized(false);
-        setHasActiveCamera(false);
-        setCameraError('');
-        setRuntimeError('');
-      }
-
-      // 重置清理状态
-      scannerStateRef.current = 'idle';
-      isStoppingRef.current = false;
-
-      console.log('✅ 扫码器资源清理完成');
-      cleanupRef.current = null;
-    })();
-
-    await cleanupRef.current;
+      });
+    }
   }, []);
 
-  // 🔥 组件挂载时初始化
+  // 🔥 组件挂载时初始化 - 按照你的方案
   useEffect(() => {
     console.log('🔄 ScannerComponentClient useEffect 触发');
 
@@ -250,21 +135,33 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
     console.log('🚀 开始执行初始化...');
     initializeComponent();
 
-    // 组件卸载时清理
+    // 组件卸载时清理 - 按照你的方案
     return () => {
-      console.log('🗑️ ScannerComponentClient 卸载，清理资源');
+      console.log('🗑️ ScannerComponentClient 卸载，执行清理...');
       isMountedRef.current = false;
-      cleanupScanner().catch(console.error);
-    };
-  }, [cleanupScanner]);
 
-  // 🔥 扫描器控制逻辑 - 修复依赖循环问题
+      if (scannerRef.current) {
+        const scanner = scannerRef.current;
+        scannerRef.current = null;
+
+        // 先调用 stop() 再调用 clear()
+        scanner.stop().catch(() => {}).finally(() => {
+          try {
+            scanner.clear();
+          } catch (e) {
+            // 忽略 removeChild 错误
+          }
+        });
+      }
+    };
+  }, []);
+
+  // 🔥 扫描器控制逻辑 - 简化版本，防止重复初始化
   useEffect(() => {
     console.log('🎛️ 扫描器控制逻辑触发', {
       isActive,
       isLibraryReady,
-      isScannerInitialized,
-      isInitializing: isInitializingRef.current
+      isScanning
     });
 
     if (!isMountedRef.current || !isLibraryReady) {
@@ -277,29 +174,23 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
 
     const controlScanner = async () => {
       // 防止重复初始化
-      if (isInitializingRef.current) {
-        console.log('⏳ 扫描器正在初始化中，跳过...');
+      if (isScanning && isActive) {
+        console.log('ℹ️ 扫描器已经在运行中');
+        return;
+      }
+
+      if (!isScanning && !isActive) {
+        console.log('ℹ️ 扫描器已经停止');
         return;
       }
 
       try {
-        if (isActive && !isScannerInitialized) {
-          console.log('🎯 扫描器激活，开始初始化...', {
-            isActive,
-            isScannerInitialized
-          });
-          isInitializingRef.current = true;
+        if (isActive && !isScanning) {
+          console.log('🎯 扫描器激活，开始初始化...');
           await startScanner();
-        } else if (!isActive && isScannerInitialized) {
+        } else if (!isActive && isScanning) {
           console.log('⏹️ 扫描器停用，开始清理...');
-          isInitializingRef.current = true;
-          await cleanupScanner();
-        } else {
-          console.log('📊 状态无需变更', {
-            isActive,
-            isScannerInitialized,
-            isInitializing: isInitializingRef.current
-          });
+          cleanupScanner();
         }
       } catch (error: any) {
         console.error('❌ 扫描器状态管理错误:', error);
@@ -311,15 +202,13 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
         if (isMountedRef.current) {
           setRuntimeError(`扫描器状态管理错误: ${error?.message || '未知错误'}`);
         }
-      } finally {
-        isInitializingRef.current = false;
       }
     };
 
     controlScanner();
-  }, [isActive, isLibraryReady]); // 移除 isScannerInitialized 避免循环
+  }, [isActive, isLibraryReady, isScanning]);
 
-  // 🔥 增强的扫描器启动函数
+  // 🔥 简化的扫描器启动函数 - 防止重复初始化
   const startScanner = async () => {
     // 防止重复初始化
     if (!isMountedRef.current || !isLibraryReady) {
@@ -327,29 +216,18 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       return;
     }
 
-    if (isInitializingRef.current) {
-      console.log('⏳ 扫描器正在初始化中，跳过启动');
+    if (isScanning) {
+      console.log('⚠️ 扫描器已经在扫描中，跳过重复启动');
       return;
     }
-
-    if (isScannerInitialized) {
-      console.log('⚠️ 扫描器已初始化，跳过重复启动');
-      return;
-    }
-
-    if (isStoppingRef.current) {
-      console.log('⏳ 扫描器正在停止中，稍后再试');
-      return;
-    }
-
-    // 设置启动状态
-    isInitializingRef.current = true;
-    scannerStateRef.current = 'starting';
 
     try {
       console.log('🔍 开始启动扫描器...');
       setRuntimeError('');
       setCameraError('');
+
+      // 设置正在扫描状态
+      setIsScanning(true);
 
       // 获取 Html5Qrcode 类
       const Html5QrcodeClass = await loadHtml5Qrcode();
@@ -457,7 +335,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
         (decodedText: string) => {
           try {
             console.log('✅ 扫描成功:', decodedText);
-            if (isMountedRef.current && !isInitializingRef.current) {
+            if (isMountedRef.current) {
               onScanSuccess(decodedText);
             }
           } catch (e: any) {
@@ -475,12 +353,6 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
         }
       );
 
-      if (isMountedRef.current) {
-        setIsScannerInitialized(true);
-        setHasActiveCamera(true);
-        scannerStateRef.current = 'running';
-        console.log('✅ 状态更新完成 - isScannerInitialized: true, hasActiveCamera: true');
-      }
       console.log('✅ 扫描器启动成功！');
 
     } catch (error: any) {
@@ -488,42 +360,40 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
 
       // 清理失败的实例
       if (scannerRef.current) {
-        try {
-          await scannerRef.current.clear();
-        } catch (clearError: any) {
-          console.warn('⚠️ 清理失败的扫描器实例时出错:', clearError);
-        }
+        const scanner = scannerRef.current;
         scannerRef.current = null;
+
+        // 使用相同的清理逻辑
+        scanner.stop().catch(() => {}).finally(() => {
+          try {
+            scanner.clear();
+          } catch (e) {
+            // 忽略 removeChild 错误
+          }
+        });
       }
 
       if (isMountedRef.current) {
-        setIsScannerInitialized(false);
-        setHasActiveCamera(false);
         setCameraError(error.message || '扫描器启动失败，请检查摄像头权限设置');
+        setIsScanning(false);
       }
-
-      // 重置状态
-      scannerStateRef.current = 'idle';
-    } finally {
-      // 确保初始化标志被重置
-      isInitializingRef.current = false;
     }
   };
 
   // 🔥 安全的摄像头切换函数
   const handleCameraSwitch = async (newCameraId: string) => {
-    if (!isMountedRef.current || isInitializingRef.current) return;
+    if (!isMountedRef.current) return;
 
     try {
       console.log('🔄 切换摄像头到:', newCameraId);
       setSelectedCameraId(newCameraId);
-      setHasActiveCamera(false);
+      setIsScanning(false);
 
-      await cleanupScanner();
+      cleanupScanner();
 
       // 延迟后重新启动
       setTimeout(() => {
-        if (isMountedRef.current && !isInitializingRef.current) {
+        if (isMountedRef.current && isActive) {
           startScanner();
         }
       }, 1000);
@@ -546,9 +416,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       setCameraError('');
 
       // 重置状态
-      setIsScannerInitialized(false);
-      setHasActiveCamera(false);
-      isInitializingRef.current = false;
+      setIsScanning(false);
 
       const Html5QrcodeClass = await loadHtml5Qrcode();
       if (!Html5QrcodeClass || !isMountedRef.current) return;
@@ -613,14 +481,12 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
       setCameraError('');
 
       // 强制重置状态
-      setIsScannerInitialized(false);
-      setHasActiveCamera(false);
-      isInitializingRef.current = false;
+      setIsScanning(false);
 
-      await cleanupScanner();
+      cleanupScanner();
 
       setTimeout(() => {
-        if (isMountedRef.current && isActive && !isInitializingRef.current) {
+        if (isMountedRef.current && isActive) {
           console.log('🔄 延迟重启扫描器...');
           startScanner();
         }
@@ -758,7 +624,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
                 )}
 
                 {/* 等待状态 */}
-                {!hasActiveCamera && !isScannerInitialized && !cameraError && (
+                {!isScanning && !cameraError && (
                   <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded-lg border-2 border-dashed border-gray-300">
                     <div className="text-center p-4">
                       <div className="text-4xl mb-2">📷</div>
@@ -771,16 +637,6 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
                       >
                         🔐 手动请求摄像头权限
                       </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* 初始化状态 */}
-                {isScannerInitialized && !hasActiveCamera && !cameraError && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-yellow-50 rounded-lg border-2 border-yellow-200">
-                    <div className="text-center p-4">
-                      <div className="text-3xl mb-2">⚠️</div>
-                      <p className="text-sm text-yellow-800">摄像头初始化中...</p>
                     </div>
                   </div>
                 )}
@@ -811,8 +667,7 @@ export default function ScannerComponentClient({ onScanSuccess, isActive }: Scan
               {/* 调试信息 */}
               <div className="w-full max-w-sm text-xs text-gray-500 space-y-1">
                 <p>• 库加载状态: {isLibraryReady ? '✅' : '❌'}</p>
-                <p>• 扫描器状态: {isScannerInitialized ? '✅ 已初始化' : '❌ 未初始化'}</p>
-                <p>• 摄像头状态: {hasActiveCamera ? '✅ 活跃' : '❌ 未活跃'}</p>
+                <p>• 扫描器状态: {isScanning ? '✅ 正在扫描' : '❌ 未扫描'}</p>
                 <p>• 可用摄像头: {availableCameras.length} 个</p>
                 {selectedCameraId && <p>• 当前摄像头: {selectedCameraId}</p>}
               </div>
