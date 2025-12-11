@@ -6,8 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+import { hasErrorCode } from '@/utils/error-helpers';
 import { Attendee } from '@/types';
 import { QrCode } from 'lucide-react';
+import { EMPTY_UUID, API_CONFIG } from '@/lib/constants';
 
 function HomePageContent() {
   const [formData, setFormData] = useState({
@@ -28,6 +31,12 @@ function HomePageContent() {
       const urlEventId = searchParams.get('event_id');
 
       if (urlEventId) {
+        // 验证UUID格式
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(urlEventId)) {
+          logger.error('Invalid event_id format:', urlEventId);
+          setError('URL中的活动ID格式无效');
+        }
         setCurrentEventId(urlEventId);
         setEventLoading(false);
         return;
@@ -42,25 +51,25 @@ function HomePageContent() {
           .limit(1);
 
         if (error) {
-          console.error('获取活动列表失败:', error);
+          logger.error('获取活动列表失败:', error);
           // 如果获取失败，使用空UUID
-          setCurrentEventId('00000000-0000-0000-0000-000000000000');
+          setCurrentEventId(EMPTY_UUID);
           setEventLoading(false);
           return;
         }
 
         if (events && events.length > 0) {
           setCurrentEventId(events[0].id);
-          console.log('✅ 自动获取最新活动ID:', events[0].id);
+          logger.log('✅ 自动获取最新活动ID:', events[0].id);
         } else {
           // 如果没有活动，使用空UUID
-          setCurrentEventId('00000000-0000-0000-0000-000000000000');
-          console.log('⚠️ 没有找到活动，使用空UUID');
+          setCurrentEventId(EMPTY_UUID);
+          logger.log('⚠️ 没有找到活动，使用空UUID');
         }
         setEventLoading(false);
       } catch (err) {
-        console.error('获取活动ID失败:', err);
-        setCurrentEventId('00000000-0000-0000-0000-000000000000');
+        logger.error('获取活动ID失败:', err);
+        setCurrentEventId(EMPTY_UUID);
         setEventLoading(false);
       }
     };
@@ -138,11 +147,11 @@ function HomePageContent() {
       // 创建成功后跳转到凭证页
       router.push(`/ticket/${newAttendee.id}`);
 
-    } catch (err: any) {
-      console.error('Registration error:', err);
+    } catch (err: unknown) {
+      logger.error('Registration error:', err);
 
       // 区分错误类型：如果是 406 Not Acceptable，说明查询逻辑有问题
-      if (err?.code === 'PGRST116') {
+      if (hasErrorCode(err, 'PGRST116')) {
         setError('系统错误，请联系工作人员');
       } else {
         setError('注册失败，请稍后重试');
@@ -180,19 +189,19 @@ function HomePageContent() {
               </div>
             )}
 
-            {!eventLoading && currentEventId && currentEventId !== '00000000-0000-0000-0000-000000000000' && (
+            {!eventLoading && currentEventId && currentEventId !== EMPTY_UUID && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
                 <p className="text-sm text-green-700">✅ 已自动关联到当前活动</p>
               </div>
             )}
 
-            {!eventLoading && (!currentEventId || currentEventId === '00000000-0000-0000-0000-000000000000') && (
+            {!eventLoading && (!currentEventId || currentEventId === EMPTY_UUID) && (
               <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                 <p className="text-sm text-yellow-700">⚠️ 请在URL中添加活动ID，或创建活动后再报名</p>
               </div>
             )}
 
-            {!eventLoading && currentEventId && currentEventId !== '00000000-0000-0000-0000-000000000000' && (
+            {!eventLoading && currentEventId && currentEventId !== EMPTY_UUID && (
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <label htmlFor="name" className="block text-sm font-medium text-gray-700">
@@ -257,7 +266,7 @@ function HomePageContent() {
               </form>
             )}
 
-            {!eventLoading && (!currentEventId || currentEventId === '00000000-0000-0000-0000-000000000000') && (
+            {!eventLoading && (!currentEventId || currentEventId === EMPTY_UUID) && (
               <div className="text-center py-8">
                 <p className="text-gray-600 mb-4">没有可用的活动，请联系工作人员创建活动后再报名</p>
               </div>

@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,19 +10,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+import { useToast } from '@/hooks/use-toast';
 import { Attendee, AttendeeStatus, Event } from '@/types';
 import { Users, UserCheck, Gift, TrendingUp, Calendar, Clock, QrCode, X, Plus, Settings, Trash2, Copy } from 'lucide-react';
 import QRCode from 'react-qr-code';
+import { EMPTY_UUID, API_CONFIG, ATTENDEE_STATUS, SUCCESS_MESSAGES } from '@/lib/constants';
 
-export default function AdminDashboardPage() {
+function AdminDashboardPageContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const { addToast } = useToast();
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [filteredAttendees, setFilteredAttendees] = useState<Attendee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [eventFilter, setEventFilter] = useState<string>('all');
   const [events, setEvents] = useState<Event[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
-  const [showQRDialog, setShowQRDialog] = useState(false);
   const [showManageDialog, setShowManageDialog] = useState(false);
   const [showEventQRDialog, setShowEventQRDialog] = useState(false);
   const [selectedEventForQR, setSelectedEventForQR] = useState<Event | null>(null);
@@ -40,21 +47,51 @@ export default function AdminDashboardPage() {
   });
 
   useEffect(() => {
+    // 处理URL中的event_id参数
+    const urlEventId = searchParams.get('event_id');
+    if (urlEventId) {
+      // 验证UUID格式
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(urlEventId)) {
+        setError('无效的活动ID格式');
+        logger.error('Invalid event_id format:', urlEventId);
+      }
+    }
+
     fetchEvents();
     fetchAttendees();
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
-    // 当 eventFilter 变化时，同步更新 selectedEvent
-    if (eventFilter !== 'all' && events.length > 0) {
-      const selected = events.find(e => e.id === eventFilter);
-      setSelectedEvent(selected || null);
-    } else if (eventFilter === 'all') {
-      setSelectedEvent(events.length > 0 ? events[0] : null);
+    // 当 events 加载完成后，处理URL参数
+    if (events.length > 0) {
+      const urlEventId = searchParams.get('event_id');
+
+      if (urlEventId) {
+        // 查找URL参数指定的活动
+        const urlEvent = events.find(e => e.id === urlEventId);
+        if (urlEvent) {
+          setEventFilter(urlEventId);
+          setSelectedEvent(urlEvent);
+          return;
+        } else {
+          // URL中的event_id无效，显示错误但不阻止页面使用
+          setError('URL中的活动ID不存在，显示所有活动数据');
+          logger.error('Event not found for ID:', urlEventId);
+        }
+      }
+
+      // 如果没有URL参数或参数无效，使用默认逻辑
+      if (eventFilter === 'all') {
+        setSelectedEvent(events.length > 0 ? events[0] : null);
+      } else if (eventFilter !== 'all') {
+        const selected = events.find(e => e.id === eventFilter);
+        setSelectedEvent(selected || null);
+      }
     }
 
     filterAttendees();
-  }, [attendees, statusFilter, eventFilter, events]);
+  }, [attendees, statusFilter, eventFilter, events, searchParams]);
 
   const fetchEvents = async () => {
     try {
@@ -71,8 +108,9 @@ export default function AdminDashboardPage() {
         setSelectedEvent(data[0]);
         setEventFilter(data[0].id);
       }
-    } catch (err: any) {
-      console.error('Fetch events error:', err);
+    } catch (err: unknown) {
+      logger.error('Fetch events error:', err);
+      setError('获取活动列表失败，请刷新页面重试');
     }
   };
 
@@ -88,8 +126,9 @@ export default function AdminDashboardPage() {
 
       if (error) throw error;
       setAttendees(data || []);
-    } catch (err: any) {
-      console.error('Fetch attendees error:', err);
+    } catch (err: unknown) {
+      logger.error('Fetch attendees error:', err);
+      setError('获取参与者数据失败，请刷新页面重试');
     } finally {
       setLoading(false);
     }
@@ -171,20 +210,17 @@ export default function AdminDashboardPage() {
     return `${formatDate(dateString)} ${formatTime(dateString)}`;
   };
 
-  // 生成应急报名链接
-  const generateEmergencyLink = () => {
-    if (!selectedEvent) return '';
-
-    const baseUrl = window.location.origin;
-    return `${baseUrl}?event_id=${selectedEvent.id}`;
-  };
-
+  
   // 创建新活动
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!newEvent.name.trim()) {
-      alert('请填写活动名称');
+      addToast({
+        type: 'error',
+        title: '验证失败',
+        message: '请填写活动名称',
+      });
       return;
     }
 
@@ -213,9 +249,13 @@ export default function AdminDashboardPage() {
       setShowManageDialog(false);
       setShowEventQRDialog(true);
 
-    } catch (err: any) {
-      console.error('Create event error:', err);
-      alert('创建活动失败，请重试');
+    } catch (err: unknown) {
+      logger.error('Create event error:', err);
+      addToast({
+        type: 'error',
+        title: '操作失败',
+        message: '创建活动失败，请重试',
+      });
     } finally {
       setLoadingCreate(false);
     }
@@ -249,11 +289,19 @@ export default function AdminDashboardPage() {
       await fetchEvents();
       await fetchAttendees();
 
-      alert('活动删除成功');
+      addToast({
+        type: 'success',
+        title: '操作成功',
+        message: '活动删除成功',
+      });
 
-    } catch (err: any) {
-      console.error('Delete event error:', err);
-      alert('删除活动失败，请重试');
+    } catch (err: unknown) {
+      logger.error('Delete event error:', err);
+      addToast({
+        type: 'error',
+        title: '操作失败',
+        message: '删除活动失败，请重试',
+      });
     } finally {
       setLoadingDelete('');
     }
@@ -275,9 +323,17 @@ export default function AdminDashboardPage() {
   // 复制链接到剪贴板
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
-      alert('链接已复制到剪贴板');
+      addToast({
+        type: 'success',
+        title: '复制成功',
+        message: SUCCESS_MESSAGES.COPY_SUCCESS,
+      });
     }).catch(() => {
-      alert('复制失败，请手动复制');
+      addToast({
+        type: 'error',
+        title: '复制失败',
+        message: '请手动复制链接',
+      });
     });
   };
 
@@ -292,9 +348,53 @@ export default function AdminDashboardPage() {
     );
   }
 
+  // 错误提示组件
+  if (error && !attendees.length && !events.length) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
+        <Card className="w-full max-w-md shadow-xl border-0">
+          <CardContent className="pt-6">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">加载失败</h2>
+                <p className="text-gray-600 text-sm mb-4">{error}</p>
+                <Button
+                  onClick={() => window.location.reload()}
+                  className="w-full"
+                >
+                  刷新页面
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4 py-8">
       <div className="max-w-6xl mx-auto space-y-8">
+        {/* 错误提示 */}
+        {error && (attendees.length > 0 || events.length > 0) && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
+            <div className="flex items-start space-x-2">
+              <svg className="w-5 h-5 mt-0.5 text-yellow-600 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <div>
+                <p className="text-sm text-yellow-700">{error}</p>
+                <p className="text-xs text-yellow-600 mt-1">页面功能正常，但某些数据可能无法显示</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 头部 */}
         <div className="text-center">
           <div className="w-20 h-20 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg">
@@ -450,44 +550,6 @@ export default function AdminDashboardPage() {
                     </div>
                   </DialogContent>
                 </Dialog>
-
-                {/* 应急二维码按钮 */}
-                {selectedEvent && (
-                  <Dialog open={showQRDialog} onOpenChange={setShowQRDialog}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm">
-                        <QrCode className="w-4 h-4 mr-2" />
-                        应急二维码
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle className="text-center">应急报名二维码</DialogTitle>
-                        <DialogDescription className="text-center">
-                          用户扫描此二维码可直接进入当前活动的报名页面
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="flex flex-col items-center space-y-4 p-4">
-                        <div className="text-center space-y-2">
-                          <p className="font-semibold text-gray-900">{selectedEvent.name}</p>
-                          <p className="text-sm text-gray-600 flex items-center justify-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            {selectedEvent.location}
-                          </p>
-                        </div>
-                        <div className="bg-white p-4 rounded-lg shadow-inner">
-                          <QRCode
-                            value={generateEmergencyLink()}
-                            size={200}
-                          />
-                        </div>
-                        <p className="text-xs text-gray-500 text-center">
-                          {generateEmergencyLink()}
-                        </p>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                )}
               </div>
             </div>
           </CardHeader>
@@ -684,10 +746,10 @@ export default function AdminDashboardPage() {
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
           <Button
             onClick={() => {
-              if (selectedEvent && selectedEvent.id && selectedEvent.id !== '00000000-0000-0000-0000-000000000000') {
-                window.location.href = `/?event_id=${selectedEvent.id}`;
+              if (selectedEvent && selectedEvent.id && selectedEvent.id !== EMPTY_UUID) {
+                router.push(`/?event_id=${selectedEvent.id}`);
               } else {
-                window.location.href = '/';
+                router.push('/');
               }
             }}
             variant="outline"
@@ -696,7 +758,7 @@ export default function AdminDashboardPage() {
             返回首页
           </Button>
           <Button
-            onClick={() => window.location.href = '/staff/scan'}
+            onClick={() => router.push('/staff/scan')}
             className="flex-1"
           >
             开始扫码
@@ -704,5 +766,20 @@ export default function AdminDashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AdminDashboardPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 flex items-center justify-center px-4">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">加载中...</p>
+        </div>
+      </div>
+    }>
+      <AdminDashboardPageContent />
+    </Suspense>
   );
 }

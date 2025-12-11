@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { logger } from '@/lib/logger';
+import { getErrorMessage } from '@/utils/error-helpers';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
@@ -35,13 +37,13 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       setIsClient(typeof window !== 'undefined');
 
       if (typeof window !== 'undefined') {
-        console.log('🔄 开始动态导入 html5-qrcode 库...');
+        logger.log('🔄 开始动态导入 html5-qrcode 库...');
 
         import('html5-qrcode')
           .then((module) => {
             if (!isMountedRef.current) return;
 
-            console.log('✅ html5-qrcode库加载成功');
+            logger.log('✅ html5-qrcode库加载成功');
             setHtml5Qrcode(module.Html5Qrcode);
             setHtml5QrcodeLoaded(true);
             setHtml5QrcodeError('');
@@ -49,15 +51,15 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
           .catch((error) => {
             if (!isMountedRef.current) return;
 
-            console.error('❌ html5-qrcode库加载失败:', error);
+            logger.error('❌ html5-qrcode库加载失败:', error);
             setHtml5QrcodeLoaded(false);
-            setHtml5QrcodeError(`扫码库加载失败: ${error?.message || '未知错误'}`);
+            setHtml5QrcodeError(`扫码库加载失败: ${getErrorMessage(error)}`);
           });
       }
-    } catch (error: any) {
-      console.error('❌ 初始化html5-qrcode时发生错误:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 初始化html5-qrcode时发生错误:', error);
       if (isMountedRef.current) {
-        setHtml5QrcodeError(`初始化失败: ${error?.message || '未知错误'}`);
+        setHtml5QrcodeError(`初始化失败: ${getErrorMessage(error)}`);
       }
     }
 
@@ -69,7 +71,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
   // 🔥 增强的摄像头权限检查 - 全面错误处理
   const checkCameraPermission = async (): Promise<boolean> => {
     try {
-      console.log('🔍 开始检查摄像头权限...');
+      logger.log('🔍 开始检查摄像头权限...');
 
       if (!isClient || !html5QrcodeLoaded || !Html5Qrcode) {
         throw new Error('扫码功能尚未准备就绪，请稍后再试');
@@ -79,33 +81,34 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
         throw new Error('浏览器不支持摄像头功能');
       }
 
-      console.log('📹 调用 Html5Qrcode.getCameras()...');
+      logger.log('📹 调用 Html5Qrcode.getCameras()...');
       const cameras = await Html5Qrcode.getCameras();
-      console.log('✅ 成功获取摄像头列表:', cameras);
+      logger.log('✅ 成功获取摄像头列表:', cameras);
 
       if (cameras && cameras.length > 0) {
-        console.log('✅ 摄像头权限获取成功');
+        logger.log('✅ 摄像头权限获取成功');
         return true;
       } else {
-        console.log('❌ 未找到摄像头');
+        logger.log('❌ 未找到摄像头');
         return false;
       }
-    } catch (error: any) {
-      console.error('❌ 摄像头权限检查失败:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 摄像头权限检查失败:', error);
 
       // 提供更具体的错误信息
-      if (error.name === 'NotAllowedError') {
+      const errorObj = error && typeof error === 'object' ? error as { name?: string } : {};
+      if (errorObj.name === 'NotAllowedError') {
         throw new Error('摄像头权限被拒绝，请点击地址栏左侧的摄像头图标并选择"允许"');
-      } else if (error.name === 'NotFoundError') {
+      } else if (errorObj.name === 'NotFoundError') {
         throw new Error('未找到摄像头设备，请确保设备有可用的摄像头');
-      } else if (error.name === 'NotReadableError') {
+      } else if (errorObj.name === 'NotReadableError') {
         throw new Error('摄像头被其他应用占用，请关闭其他使用摄像头的应用');
-      } else if (error.name === 'NotSupportedError') {
+      } else if (errorObj.name === 'NotSupportedError') {
         throw new Error('浏览器不支持摄像头功能，请使用现代浏览器');
-      } else if (error.name === 'SecurityError') {
+      } else if (errorObj.name === 'SecurityError') {
         throw new Error('安全限制：网页需要通过HTTPS访问才能使用摄像头');
       } else {
-        throw new Error(`摄像头访问失败: ${error.message || '未知错误'}`);
+        throw new Error(`摄像头访问失败: ${getErrorMessage(error)}`);
       }
     }
   };
@@ -116,15 +119,15 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
 
     try {
       if (isActive && !isScannerInitialized) {
-        console.log('🎯 扫描器激活，开始初始化...');
+        logger.log('🎯 扫描器激活，开始初始化...');
         startScanner();
       } else if (!isActive && isScannerInitialized) {
-        console.log('⏹️ 扫描器停用，开始清理...');
+        logger.log('⏹️ 扫描器停用，开始清理...');
         stopScanner().catch(console.error);
       }
-    } catch (error: any) {
-      console.error('❌ 扫描器状态管理错误:', error);
-      setRuntimeError(`扫描器状态管理错误: ${error?.message || '未知错误'}`);
+    } catch (error: unknown) {
+      logger.error('❌ 扫描器状态管理错误:', error);
+      setRuntimeError(`扫描器状态管理错误: ${getErrorMessage(error)}`);
     }
   }, [isActive, isScannerInitialized]);
 
@@ -132,9 +135,9 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
-      console.log('🧹 ScannerComponent 卸载，清理资源...');
-      stopScanner().catch((error: any) => {
-        console.error('⚠️ 组件卸载时停止扫描器失败:', error);
+      logger.log('🧹 ScannerComponent 卸载，清理资源...');
+      stopScanner().catch((error: unknown) => {
+        logger.error('⚠️ 组件卸载时停止扫描器失败:', error);
       });
     };
   }, []);
@@ -144,21 +147,21 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
     if (!isMountedRef.current) return;
 
     try {
-      console.log('🔍 开始启动扫描器...');
+      logger.log('🔍 开始启动扫描器...');
       setRuntimeError('');
       setCameraError('');
 
       // 步骤1: 检查客户端和库加载状态
       if (!isClient || !html5QrcodeLoaded || !Html5Qrcode) {
         const errorMsg = html5QrcodeError || '扫码功能正在加载中，请稍后再试';
-        console.error('❌ 客户端或库检查失败:', errorMsg);
+        logger.error('❌ 客户端或库检查失败:', errorMsg);
         setCameraError(errorMsg);
         return;
       }
 
       // 步骤2: 检查重复初始化
       if (scannerRef.current && isScannerInitialized) {
-        console.warn('⚠️ 扫描器已经初始化，跳过重复初始化');
+        logger.warn('⚠️ 扫描器已经初始化，跳过重复初始化');
         return;
       }
 
@@ -166,7 +169,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       const container = document.getElementById(containerId);
       if (!container) {
         const errorMsg = '扫描器容器不存在，请刷新页面重试';
-        console.error('❌ 容器检查失败:', errorMsg);
+        logger.error('❌ 容器检查失败:', errorMsg);
         setCameraError(errorMsg);
         return;
       }
@@ -174,7 +177,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       // 步骤4: 检查浏览器支持
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         const errorMsg = '浏览器不支持摄像头功能，请使用现代浏览器如Chrome、Firefox或Edge';
-        console.error('❌ 浏览器支持检查失败:', errorMsg);
+        logger.error('❌ 浏览器支持检查失败:', errorMsg);
         setCameraError(errorMsg);
         return;
       }
@@ -182,39 +185,41 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       // 步骤5: 清理旧实例
       if (scannerRef.current) {
         try {
-          console.log('🧹 清理旧扫描器实例...');
+          logger.log('🧹 清理旧扫描器实例...');
           await scannerRef.current.stop();
           await scannerRef.current.clear();
-        } catch (e: any) {
-          console.warn('⚠️ 清理旧扫描器时出错:', e);
+        } catch (e: unknown) {
+          logger.warn('⚠️ 清理旧扫描器时出错:', e);
         }
         scannerRef.current = null;
       }
 
       // 清空容器
-      container.innerHTML = '';
+      container.replaceChildren();
 
       // 步骤6: 获取摄像头列表
-      console.log('📹 获取摄像头列表...');
+      logger.log('📹 获取摄像头列表...');
       let cameras;
       try {
         cameras = await Html5Qrcode.getCameras();
-        console.log('✅ 成功获取摄像头列表:', cameras);
-      } catch (camerasError: any) {
-        console.error('❌ 获取摄像头列表失败:', camerasError);
+        logger.log('✅ 成功获取摄像头列表:', cameras);
+      } catch (camerasError: unknown) {
+        logger.error('❌ 获取摄像头列表失败:', camerasError);
 
         // 根据错误类型提供具体提示
         let errorMessage = '无法访问摄像头';
-        if (camerasError.name === 'NotAllowedError') {
+        const camerasErrorObj = camerasError && typeof camerasError === 'object' ? camerasError as { name?: string; message?: string } : {};
+
+        if (camerasErrorObj.name === 'NotAllowedError') {
           errorMessage = '摄像头权限被拒绝，请点击地址栏左侧的摄像头图标并选择"允许"';
-        } else if (camerasError.name === 'NotFoundError') {
+        } else if (camerasErrorObj.name === 'NotFoundError') {
           errorMessage = '未找到摄像头设备，请确保设备有可用的摄像头';
-        } else if (camerasError.name === 'NotReadableError') {
+        } else if (camerasErrorObj.name === 'NotReadableError') {
           errorMessage = '摄像头被其他应用占用，请关闭其他使用摄像头的应用';
-        } else if (camerasError.name === 'NotSupportedError') {
+        } else if (camerasErrorObj.name === 'NotSupportedError') {
           errorMessage = '浏览器不支持摄像头功能，请使用Chrome、Firefox或Edge浏览器';
         } else {
-          errorMessage = `无法访问摄像头: ${camerasError.message}`;
+          errorMessage = `无法访问摄像头: ${camerasErrorObj.message || getErrorMessage(camerasError)}`;
         }
 
         setCameraError(errorMessage);
@@ -223,13 +228,13 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
 
       if (!cameras || cameras.length === 0) {
         const errorMsg = '未找到可用的摄像头设备';
-        console.error('❌ 摄像头列表为空:', errorMsg);
+        logger.error('❌ 摄像头列表为空:', errorMsg);
         setCameraError(errorMsg);
         return;
       }
 
       // 步骤7: 处理摄像头列表
-      const cameraList = cameras.map((camera: any, index: number) => {
+      const cameraList = cameras.map((camera: import('html5-qrcode').CameraDevice, index: number) => {
         try {
           let label = camera.label || `摄像头 ${index + 1}`;
 
@@ -248,8 +253,8 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
             id: camera.id,
             label: label
           };
-        } catch (e: any) {
-          console.warn('⚠️ 处理摄像头信息时出错:', e);
+        } catch (e: unknown) {
+          logger.warn('⚠️ 处理摄像头信息时出错:', e);
           return {
             id: camera.id || `camera-${index}`,
             label: `摄像头 ${index + 1}`
@@ -265,7 +270,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       let cameraId = selectedCameraId;
       if (!cameraId) {
         try {
-          const backCamera = cameras.find((camera: any) =>
+          const backCamera = cameras.find((camera: import('html5-qrcode').CameraDevice) =>
             camera.label?.toLowerCase().includes('back') ||
             camera.label?.toLowerCase().includes('environment') ||
             camera.label?.toLowerCase().includes('后置')
@@ -274,26 +279,26 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
           if (isMountedRef.current) {
             setSelectedCameraId(cameraId);
           }
-        } catch (e: any) {
-          console.warn('⚠️ 选择摄像头时出错:', e);
+        } catch (e: unknown) {
+          logger.warn('⚠️ 选择摄像头时出错:', e);
           cameraId = cameras[0]?.id;
         }
       }
 
       // 步骤9: 创建Html5Qrcode实例
-      console.log('📹 创建Html5Qrcode实例...');
+      logger.log('📹 创建Html5Qrcode实例...');
       let scanner;
       try {
         scanner = new Html5Qrcode(containerId);
         scannerRef.current = scanner;
-      } catch (e: any) {
-        console.error('❌ 创建Html5Qrcode实例失败:', e);
-        setCameraError(`创建扫描器失败: ${e?.message || '未知错误'}`);
+      } catch (e: unknown) {
+        logger.error('❌ 创建Html5Qrcode实例失败:', e);
+        setCameraError(`创建扫描器失败: ${getErrorMessage(e)}`);
         return;
       }
 
       // 步骤10: 启动扫描
-      console.log('📹 启动摄像头, cameraId:', cameraId);
+      logger.log('📹 启动摄像头, cameraId:', cameraId);
       try {
         await scanner.start(
           cameraId,
@@ -303,21 +308,22 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
           },
           (decodedText: string) => {
             try {
-              console.log('✅ 扫描成功:', decodedText);
+              logger.log('✅ 扫描成功:', decodedText);
               if (isMountedRef.current) {
                 onScanSuccess(decodedText);
               }
-            } catch (e: any) {
-              console.error('❌ 处理扫描结果时出错:', e);
+            } catch (e: unknown) {
+              logger.error('❌ 处理扫描结果时出错:', e);
               if (isMountedRef.current) {
-                setRuntimeError(`处理扫描结果失败: ${e?.message || '未知错误'}`);
+                setRuntimeError(`处理扫描结果失败: ${getErrorMessage(e)}`);
               }
             }
           },
-          (error: any) => {
+          (error: unknown) => {
             // 只记录扫描警告，不影响正常扫描
-            if (error && !error.includes('No QR code found') && !error.includes('NotFoundException')) {
-              console.warn('⚠️ 扫描警告:', error);
+            const errorString = typeof error === 'string' ? error : String(error);
+            if (error && !errorString.includes('No QR code found') && !errorString.includes('NotFoundException')) {
+              logger.warn('⚠️ 扫描警告:', error);
             }
           }
         );
@@ -326,16 +332,16 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
           setIsScannerInitialized(true);
           setHasActiveCamera(true);
         }
-        console.log('✅ 扫描器启动成功！');
+        logger.log('✅ 扫描器启动成功！');
 
-      } catch (startError: any) {
-        console.error('❌ 启动扫描器失败:', startError);
+      } catch (startError: unknown) {
+        logger.error('❌ 启动扫描器失败:', startError);
 
         // 清理失败的实例
         try {
           await scanner.clear();
-        } catch (clearError: any) {
-          console.warn('⚠️ 清理失败的扫描器实例时出错:', clearError);
+        } catch (clearError: unknown) {
+          logger.warn('⚠️ 清理失败的扫描器实例时出错:', clearError);
         }
         scannerRef.current = null;
 
@@ -351,8 +357,8 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
         }
       }
 
-    } catch (error: any) {
-      console.error('❌ 扫描器启动过程中发生意外错误:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 扫描器启动过程中发生意外错误:', error);
 
       if (isMountedRef.current) {
         setIsScannerInitialized(false);
@@ -361,7 +367,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
 
         let errorMessage = '扫描器启动失败，请检查摄像头权限设置';
         if (error instanceof Error) {
-          errorMessage = error.message;
+          errorMessage = getErrorMessage(error);
         }
         setCameraError(errorMessage);
       }
@@ -371,23 +377,23 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
   // 🔥 增强的扫描器停止函数
   const stopScanner = async () => {
     try {
-      console.log('🛑 停止扫描器...');
+      logger.log('🛑 停止扫描器...');
 
       if (scannerRef.current) {
         try {
-          console.log('⏹️ 停止摄像头...');
+          logger.log('⏹️ 停止摄像头...');
           await scannerRef.current.stop();
-          console.log('✅ 摄像头已停止');
-        } catch (error: any) {
-          console.warn('⚠️ 停止摄像头时出错:', error);
+          logger.log('✅ 摄像头已停止');
+        } catch (error: unknown) {
+          logger.warn('⚠️ 停止摄像头时出错:', error);
         }
 
         try {
-          console.log('🧹 清理扫描器资源...');
+          logger.log('🧹 清理扫描器资源...');
           await scannerRef.current.clear();
-          console.log('✅ 扫描器已清理');
-        } catch (error: any) {
-          console.warn('⚠️ 清理扫描器时出错:', error);
+          logger.log('✅ 扫描器已清理');
+        } catch (error: unknown) {
+          logger.warn('⚠️ 清理扫描器时出错:', error);
         }
 
         scannerRef.current = null;
@@ -402,11 +408,11 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       // 清空容器内容
       const container = document.getElementById(containerId);
       if (container) {
-        container.innerHTML = '';
+        container.replaceChildren();
       }
 
-    } catch (error: any) {
-      console.error('❌ 停止扫描器时发生意外错误:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 停止扫描器时发生意外错误:', error);
 
       // 即使停止失败也要强制清理状态，防止页面卡死
       scannerRef.current = null;
@@ -420,7 +426,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
   // 🔥 安全的摄像头切换函数
   const handleCameraSwitch = async (newCameraId: string) => {
     try {
-      console.log('🔄 切换摄像头到:', newCameraId);
+      logger.log('🔄 切换摄像头到:', newCameraId);
 
       if (!isMountedRef.current) return;
 
@@ -437,10 +443,10 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
         }
       }, 1000);
 
-    } catch (error: any) {
-      console.error('❌ 切换摄像头失败:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 切换摄像头失败:', error);
       if (isMountedRef.current) {
-        setRuntimeError(`切换摄像头失败: ${error?.message || '未知错误'}`);
+        setRuntimeError(`切换摄像头失败: ${getErrorMessage(error)}`);
       }
     }
   };
@@ -448,20 +454,20 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
   // 🔥 安全的权限请求函数
   const handlePermissionRequest = async () => {
     try {
-      console.log('🔐 手动请求摄像头权限...');
+      logger.log('🔐 手动请求摄像头权限...');
       setRuntimeError('');
 
       const hasPermission = await checkCameraPermission();
       if (hasPermission && isMountedRef.current) {
-        console.log('✅ 权限获取成功，启动扫描器...');
+        logger.log('✅ 权限获取成功，启动扫描器...');
         startScanner();
       } else if (isMountedRef.current) {
         setCameraError('无法获取摄像头权限，请检查浏览器设置');
       }
-    } catch (error: any) {
-      console.error('❌ 权限请求失败:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 权限请求失败:', error);
       if (isMountedRef.current) {
-        setCameraError(`权限请求失败: ${error?.message || '未知错误'}`);
+        setCameraError(`权限请求失败: ${getErrorMessage(error)}`);
       }
     }
   };
@@ -469,7 +475,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
   // 🔥 安全的扫描器重启函数
   const handleRestartScanner = async () => {
     try {
-      console.log('🔄 重启扫描器...');
+      logger.log('🔄 重启扫描器...');
       setRuntimeError('');
 
       await stopScanner();
@@ -480,10 +486,10 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
         }
       }, 500);
 
-    } catch (error: any) {
-      console.error('❌ 重启扫描器失败:', error);
+    } catch (error: unknown) {
+      logger.error('❌ 重启扫描器失败:', error);
       if (isMountedRef.current) {
-        setRuntimeError(`重启扫描器失败: ${error?.message || '未知错误'}`);
+        setRuntimeError(`重启扫描器失败: ${getErrorMessage(error)}`);
       }
     }
   };

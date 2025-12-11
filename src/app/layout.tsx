@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { ToastProvider } from '@/components/ToastProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -19,8 +21,12 @@ export default function RootLayout({
   return (
     <html lang="zh-CN">
       <body className={`${inter.className} bg-gray-50 min-h-screen`}>
-        {children}
-        <Toaster />
+        <ErrorBoundary>
+          <ToastProvider>
+            {children}
+            <Toaster />
+          </ToastProvider>
+        </ErrorBoundary>
       </body>
     </html>
   );

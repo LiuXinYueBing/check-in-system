@@ -6,7 +6,9 @@ import QRCode from 'react-qr-code';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { Attendee } from '@/types';
+import { EMPTY_UUID, ATTENDEE_STATUS } from '@/lib/constants';
 
 export default function TicketPage() {
   const params = useParams();
@@ -35,8 +37,8 @@ export default function TicketPage() {
       }
 
       setAttendee(data);
-    } catch (err: any) {
-      console.error('Error fetching attendee:', err);
+    } catch (err: unknown) {
+      logger.error('Error fetching attendee:', err);
       setError('无法获取凭证信息，请联系工作人员');
     } finally {
       setLoading(false);
@@ -45,19 +47,19 @@ export default function TicketPage() {
 
   const getStatusInfo = (status: string) => {
     switch (status) {
-      case 'registered':
+      case ATTENDEE_STATUS.REGISTERED:
         return {
           text: '待入场',
           color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
           description: '请在活动入口处扫描二维码签到'
         };
-      case 'checked_in':
+      case ATTENDEE_STATUS.CHECKED_IN:
         return {
           text: '已入场',
           color: 'bg-green-100 text-green-800 border-green-200',
           description: '您已入场，请在礼品区核销二维码'
         };
-      case 'redeemed':
+      case ATTENDEE_STATUS.REDEEMED:
         return {
           text: '已核销',
           color: 'bg-gray-100 text-gray-800 border-gray-200',
@@ -108,7 +110,7 @@ export default function TicketPage() {
               </div>
               <Button
                 onClick={() => {
-                  if (attendee?.event_id && attendee.event_id !== '00000000-0000-0000-0000-000000000000') {
+                  if (attendee?.event_id && attendee.event_id !== EMPTY_UUID) {
                     router.push(`/?event_id=${attendee.event_id}`);
                   } else {
                     router.push('/');
@@ -223,7 +225,7 @@ export default function TicketPage() {
         {/* 底部按钮 */}
         <Button
           onClick={() => {
-            if (attendee?.event_id && attendee.event_id !== '00000000-0000-0000-0000-000000000000') {
+            if (attendee?.event_id && attendee.event_id !== EMPTY_UUID) {
               router.push(`/?event_id=${attendee.event_id}`);
             } else {
               router.push('/');

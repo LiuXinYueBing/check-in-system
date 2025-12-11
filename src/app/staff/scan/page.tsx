@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +10,8 @@ import { Attendee, Event } from '@/types';
 import { QrCode, User, Clock, CheckCircle, XCircle, Gift, MapPin, ChevronDown, Settings } from 'lucide-react';
 import ScannerWrapper from '@/components/ScannerWrapper';
 import { ScannerErrorBoundary } from '@/components/ScannerErrorBoundary';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/local-storage';
+import { LS_KEYS, SCAN_CONFIG, UI_CONFIG, ATTENDEE_STATUS } from '@/lib/constants';
 
 export default function StaffScanPage() {
   const [attendee, setAttendee] = useState<Attendee | null>(null);
@@ -37,31 +40,26 @@ export default function StaffScanPage() {
   });
 
   // 自动继续扫描设置
-  const [autoContinueScan, setAutoContinueScan] = useState(true);
-  const [waitTime, setWaitTime] = useState(2);
-  const [showSettings, setShowSettings] = useState(false);
+  const [autoContinueScan, setAutoContinueScan] = useState<boolean>(true);
+  const [waitTime, setWaitTime] = useState<number>(SCAN_CONFIG.DEFAULT_WAIT_TIME);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
 
   // 加载设置
   useEffect(() => {
-    const savedAutoContinue = localStorage.getItem('staff_auto_continue_scan');
-    const savedWaitTime = localStorage.getItem('staff_wait_time');
+    const savedAutoContinue = safeLocalStorageGet<boolean>(LS_KEYS.STAFF_AUTO_CONTINUE_SCAN, true);
+    const savedWaitTime = safeLocalStorageGet<number>(LS_KEYS.STAFF_WAIT_TIME, SCAN_CONFIG.DEFAULT_WAIT_TIME);
 
-    if (savedAutoContinue !== null) {
-      setAutoContinueScan(savedAutoContinue === 'true');
-    }
-
-    if (savedWaitTime !== null) {
-      setWaitTime(parseInt(savedWaitTime, 10));
-    }
+    setAutoContinueScan(savedAutoContinue);
+    setWaitTime(savedWaitTime);
   }, []);
 
   // 保存设置
   useEffect(() => {
-    localStorage.setItem('staff_auto_continue_scan', autoContinueScan.toString());
+    safeLocalStorageSet(LS_KEYS.STAFF_AUTO_CONTINUE_SCAN, autoContinueScan);
   }, [autoContinueScan]);
 
   useEffect(() => {
-    localStorage.setItem('staff_wait_time', waitTime.toString());
+    safeLocalStorageSet(LS_KEYS.STAFF_WAIT_TIME, waitTime);
   }, [waitTime]);
 
   // 加载所有活动
@@ -71,7 +69,7 @@ export default function StaffScanPage() {
 
   const fetchEvents = async () => {
     try {
-      console.log('🔄 开始获取活动列表...');
+      logger.log('🔄 开始获取活动列表...');
       setLoadingEvents(true);
 
       const { data, error } = await supabase
@@ -80,32 +78,32 @@ export default function StaffScanPage() {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('❌ Fetch events error:', error);
+        logger.error('❌ Fetch events error:', error);
         showGlobalNotification('error', `无法获取活动列表: ${error.message}`);
         return;
       }
 
-      console.log('✅ 成功获取活动列表，数量:', data?.length || 0);
+      logger.log('✅ 成功获取活动列表，数量:', data?.length || 0);
       setEvents(data || []);
 
       // 检查本地是否有缓存的活动
-      const cachedEventId = localStorage.getItem('staff_selected_event_id');
-      const cachedEventName = localStorage.getItem('staff_selected_event_name');
+      const cachedEventId = safeLocalStorageGet<string>(LS_KEYS.STAFF_SELECTED_EVENT_ID, '');
+      const cachedEventName = safeLocalStorageGet<string>(LS_KEYS.STAFF_SELECTED_EVENT_NAME, '');
 
       if (cachedEventId && cachedEventName) {
-        console.log('📋 找到缓存活动:', cachedEventName);
+        logger.log('📋 找到缓存活动:', cachedEventName);
         setSelectedEventId(cachedEventId);
         setSelectedEventName(cachedEventName);
         setShowEventSelector(false);
         setScanning(true);
         fetchEventStats(cachedEventId);
       } else {
-        console.log('📋 未找到缓存活动，显示选择器');
+        logger.log('📋 未找到缓存活动，显示选择器');
         setShowEventSelector(true);
         setScanning(false);
       }
     } catch (err) {
-      console.error('Fetch events error:', err);
+      logger.error('Fetch events error:', err);
       showGlobalNotification('error', '无法获取活动列表');
     } finally {
       setLoadingEvents(false);
@@ -113,13 +111,13 @@ export default function StaffScanPage() {
   };
 
   const handleEventSelect = (eventId: string, eventName: string, location: string) => {
-    console.log('🎯 选择活动:', eventName);
+    logger.log('🎯 选择活动:', eventName);
     setSelectedEventId(eventId);
     setSelectedEventName(eventName);
     setShowEventSelector(false);
 
-    localStorage.setItem('staff_selected_event_id', eventId);
-    localStorage.setItem('staff_selected_event_name', `${eventName} - ${location}`);
+    safeLocalStorageSet(LS_KEYS.STAFF_SELECTED_EVENT_ID, eventId);
+    safeLocalStorageSet(LS_KEYS.STAFF_SELECTED_EVENT_NAME, `${eventName} - ${location}`);
 
     setScanning(true);
     fetchEventStats(eventId);
@@ -138,13 +136,13 @@ export default function StaffScanPage() {
       const stats = (data || []).reduce((acc, attendee) => {
         acc.total++;
         switch (attendee.status) {
-          case 'registered':
+          case ATTENDEE_STATUS.REGISTERED:
             acc.registered++;
             break;
-          case 'checked_in':
+          case ATTENDEE_STATUS.CHECKED_IN:
             acc.checkedIn++;
             break;
-          case 'redeemed':
+          case ATTENDEE_STATUS.REDEEMED:
             acc.redeemed++;
             break;
         }
@@ -152,14 +150,14 @@ export default function StaffScanPage() {
       }, { total: 0, registered: 0, checkedIn: 0, redeemed: 0 });
 
       setEventStats({ ...stats, loading: false });
-    } catch (err: any) {
-      console.error('Fetch event stats error:', err);
+    } catch (err: unknown) {
+      logger.error('Fetch event stats error:', err);
       setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: false });
     }
   };
 
   const handleSwitchEvent = () => {
-    console.log('🔄 切换活动，停止扫描');
+    logger.log('🔄 切换活动，停止扫描');
     setScanning(false);
     setShowEventSelector(true);
     setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: true });
@@ -170,7 +168,7 @@ export default function StaffScanPage() {
     setGlobalNotification({ show: true, type, message });
     setTimeout(() => {
       setGlobalNotification({ show: false, type: 'error', message: '' });
-    }, 3000);
+    }, UI_CONFIG.NOTIFICATION_DURATION);
   };
 
   // 处理扫描成功
@@ -188,11 +186,11 @@ export default function StaffScanPage() {
         .single();
 
       if (fetchError) {
-        console.error('Fetch attendee error:', fetchError);
+        logger.error('Fetch attendee error:', fetchError);
         showGlobalNotification('error', '查询失败，无法查询用户信息');
         setTimeout(() => {
           setScanning(true);
-        }, 2000);
+        }, UI_CONFIG.SCAN_RESULT_DELAY);
         return;
       }
 
@@ -200,26 +198,26 @@ export default function StaffScanPage() {
         showGlobalNotification('warning', '⚠️ 场次错误！该用户属于其他活动，请核实！');
         setTimeout(() => {
           setScanning(true);
-        }, 2000);
+        }, UI_CONFIG.SCAN_RESULT_DELAY);
         return;
       }
 
       setAttendee(scannedAttendee);
       fetchEventStats(selectedEventId);
 
-    } catch (err: any) {
-      console.error('Scan fetch error:', err);
+    } catch (err: unknown) {
+      logger.error('Scan fetch error:', err);
       showGlobalNotification('error', '查询失败，无法查询用户信息');
       setTimeout(() => {
         setScanning(true);
-      }, 2000);
+      }, UI_CONFIG.SCAN_RESULT_DELAY);
     }
   };
 
   // 恢复扫描
   const resumeScanning = () => {
-    console.log('🔄 恢复扫描状态');
-    console.log('📊 当前状态:', {
+    logger.log('🔄 恢复扫描状态');
+    logger.log('📊 当前状态:', {
       attendee: attendee ? attendee.name : null,
       scanning: scanning,
       autoContinueScan: autoContinueScan,
@@ -261,21 +259,21 @@ export default function StaffScanPage() {
       // 自动继续扫描
       if (autoContinueScan) {
         setTimeout(() => {
-          console.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
+          logger.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
           resumeScanning();
           setLoading(false);
         }, waitTime * 1000);
       } else {
         setLoading(false);
       }
-    } catch (err: any) {
-      console.error('Check-in error:', err);
+    } catch (err: unknown) {
+      logger.error('Check-in error:', err);
       showGlobalNotification('error', '操作失败，请稍后重试');
 
       setTimeout(() => {
         resumeScanning();
         setLoading(false);
-      }, 5000);
+      }, UI_CONFIG.ERROR_RETRY_DELAY);
     }
   };
 
@@ -311,27 +309,27 @@ export default function StaffScanPage() {
       // 自动继续扫描
       if (autoContinueScan) {
         setTimeout(() => {
-          console.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
+          logger.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
           resumeScanning();
           setLoading(false);
         }, waitTime * 1000);
       } else {
         setLoading(false);
       }
-    } catch (err: any) {
-      console.error('Redeem error:', err);
+    } catch (err: unknown) {
+      logger.error('Redeem error:', err);
       showGlobalNotification('error', '操作失败，请稍后重试');
 
       setTimeout(() => {
         resumeScanning();
         setLoading(false);
-      }, 5000);
+      }, UI_CONFIG.ERROR_RETRY_DELAY);
     }
   };
 
   const getStatusInfo = (status: string) => {
     switch (status) {
-      case 'registered':
+      case ATTENDEE_STATUS.REGISTERED:
         return {
           text: '待入场',
           color: 'registered',
@@ -341,7 +339,7 @@ export default function StaffScanPage() {
           actionText: '确认入场',
           actionColor: 'bg-green-600 hover:bg-green-700',
         };
-      case 'checked_in':
+      case ATTENDEE_STATUS.CHECKED_IN:
         return {
           text: '已入场',
           color: 'checkedIn',
@@ -351,7 +349,7 @@ export default function StaffScanPage() {
           actionText: '核销抵用券',
           actionColor: 'bg-orange-600 hover:bg-orange-700',
         };
-      case 'redeemed':
+      case ATTENDEE_STATUS.REDEEMED:
         return {
           text: '已核销',
           color: 'redeemed',

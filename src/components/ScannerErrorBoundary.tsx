@@ -1,6 +1,7 @@
 'use client';
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 
 interface Props {
@@ -35,7 +36,7 @@ export class ScannerErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     // 你同样可以将错误日志上报给服务器
-    console.error('🚨 ScannerErrorBoundary 捕获到错误:', error, errorInfo);
+    logger.error('🚨 ScannerErrorBoundary 捕获到错误:', { error, errorInfo });
 
     // 检查是否是SSR相关错误
     const isSSRError = error.message.includes('window is not defined') ||
@@ -44,7 +45,7 @@ export class ScannerErrorBoundary extends Component<Props, State> {
                       error.message.includes('localStorage is not defined');
 
     if (isSSRError) {
-      console.warn('⚠️ 检测到SSR相关错误，这通常是正常的，因为扫码组件仅在客户端运行');
+      logger.warn('⚠️ 检测到SSR相关错误，这通常是正常的，因为扫码组件仅在客户端运行');
     }
 
     this.setState({

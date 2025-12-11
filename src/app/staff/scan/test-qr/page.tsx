@@ -2,15 +2,18 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { logger } from '@/lib/logger';
+import { useToast } from '@/hooks/use-toast';
 
 export default function TestQRPage() {
+  const { addToast } = useToast();
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
   const containerId = 'qr-test-container';
   const styleIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const [isScannerInitialized, setIsScannerInitialized] = useState(false);
 
   useEffect(() => {
-    console.log('🔍 测试页面加载，初始化扫描器...');
+    logger.log('🔍 测试页面加载，初始化扫描器...');
 
     // 等待组件挂载
     const timer = setTimeout(() => {
@@ -26,7 +29,7 @@ export default function TestQRPage() {
 
   // 🔥 修复摄像头选择器文字旋转问题 - 简化版本
   const fixCameraSelectorStyles = () => {
-    console.log('🔧 简化样式修复 (测试页面)...');
+    logger.log('🔧 简化样式修复 (测试页面)...');
 
     // 隐藏不需要的UI元素
     const elementsToHide = [
@@ -50,19 +53,19 @@ export default function TestQRPage() {
       const textContent = element.textContent?.trim() || '';
 
       if (textContent.includes('Select Camera') || textContent.includes('Stop Scanning')) {
-        console.log(`✅ 修复文字旋转 (测试): ${textContent}`);
+        logger.log(`✅ 修复文字旋转 (测试): ${textContent}`);
         element.style.transform = 'none';
         element.style.animation = 'none';
         element.style.transition = 'none';
       }
     });
 
-    console.log('✅ 测试页面样式修复完成');
+    logger.log('✅ 测试页面样式修复完成');
   };
 
   // 启动定时器持续修复样式
   const startStyleFixInterval = () => {
-    console.log('⏰ 启动简化样式修复定时器 (测试页面)...');
+    logger.log('⏰ 启动简化样式修复定时器 (测试页面)...');
     // 立即执行一次
     fixCameraSelectorStyles();
 
@@ -81,17 +84,17 @@ export default function TestQRPage() {
   };
 
   const startScanner = () => {
-    console.log('🚀 开始启动扫描器...');
+    logger.log('🚀 开始启动扫描器...');
 
     try {
       // 检查容器是否存在
       const container = document.getElementById(containerId);
       if (!container) {
-        console.error('❌ 容器不存在:', containerId);
+        logger.error('❌ 容器不存在:', containerId);
         return;
       }
 
-      console.log('✅ 容器存在，创建扫描器...');
+      logger.log('✅ 容器存在，创建扫描器...');
 
       const scanner = new Html5QrcodeScanner(
         containerId,
@@ -105,18 +108,22 @@ export default function TestQRPage() {
 
       scanner.render(
         (decodedText) => {
-          console.log('✅ 扫描成功:', decodedText);
-          alert(`扫描成功: ${decodedText}`);
+          logger.log('✅ 扫描成功:', decodedText);
+          addToast({
+            type: 'success',
+            title: '扫描成功',
+            message: `扫描内容: ${decodedText}`,
+          });
         },
         (error) => {
           if (error && !error.includes('No QR code found')) {
-            console.warn('⚠️ 扫描错误:', error);
+            logger.warn('⚠️ 扫描错误:', error);
           }
         }
       );
 
       scannerRef.current = scanner;
-      console.log('✅ 扫描器创建成功');
+      logger.log('✅ 扫描器创建成功');
 
       // 启动样式修复定时器
       setTimeout(() => {
@@ -124,7 +131,7 @@ export default function TestQRPage() {
       }, 1000); // 延迟1秒启动，确保扫描器完全初始化
 
     } catch (error) {
-      console.error('❌ 扫描器启动失败:', error);
+      logger.error('❌ 扫描器启动失败:', error);
     }
   };
 
@@ -135,16 +142,16 @@ export default function TestQRPage() {
     if (scannerRef.current) {
       try {
         scannerRef.current.clear();
-        console.log('🛑 扫描器已停止');
+        logger.log('🛑 扫描器已停止');
       } catch (error) {
-        console.warn('⚠️ 停止扫描器时出错:', error);
+        logger.warn('⚠️ 停止扫描器时出错:', error);
       }
       scannerRef.current = null;
     }
   };
 
   const handleRestart = () => {
-    console.log('🔄 重启扫描器');
+    logger.log('🔄 重启扫描器');
     stopScanner();
     setTimeout(() => {
       startScanner();

@@ -2,20 +2,21 @@
 
 import { Button } from '@/components/ui/button';
 import { Home, QrCode, BarChart3, Users } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 export default function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
   const isActive = (path: string) => pathname === path;
 
   const handleNavigate = (path: string) => {
     // 保持当前的URL参数
-    const currentUrl = new URL(window.location.href);
-    const currentParams = currentUrl.searchParams.toString();
+    const currentParams = searchParams.toString();
 
     const newUrl = path + (currentParams ? `?${currentParams}` : '');
-    window.location.href = newUrl;
+    router.push(newUrl);
   };
 
   return (
