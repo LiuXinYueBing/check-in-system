@@ -219,6 +219,12 @@ export default function StaffScanPage() {
   // 恢复扫描
   const resumeScanning = () => {
     console.log('🔄 恢复扫描状态');
+    console.log('📊 当前状态:', {
+      attendee: attendee ? attendee.name : null,
+      scanning: scanning,
+      autoContinueScan: autoContinueScan,
+      waitTime: waitTime
+    });
     setAttendee(null);
     setScanning(true);
   };
@@ -255,8 +261,12 @@ export default function StaffScanPage() {
       // 自动继续扫描
       if (autoContinueScan) {
         setTimeout(() => {
+          console.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
           resumeScanning();
+          setLoading(false);
         }, waitTime * 1000);
+      } else {
+        setLoading(false);
       }
     } catch (err: any) {
       console.error('Check-in error:', err);
@@ -264,9 +274,8 @@ export default function StaffScanPage() {
 
       setTimeout(() => {
         resumeScanning();
+        setLoading(false);
       }, 5000);
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -302,8 +311,12 @@ export default function StaffScanPage() {
       // 自动继续扫描
       if (autoContinueScan) {
         setTimeout(() => {
+          console.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
           resumeScanning();
+          setLoading(false);
         }, waitTime * 1000);
+      } else {
+        setLoading(false);
       }
     } catch (err: any) {
       console.error('Redeem error:', err);
@@ -311,9 +324,8 @@ export default function StaffScanPage() {
 
       setTimeout(() => {
         resumeScanning();
+        setLoading(false);
       }, 5000);
-    } finally {
-      setLoading(false);
     }
   };
 
