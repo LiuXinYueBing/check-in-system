@@ -683,7 +683,13 @@ export default function AdminDashboardPage() {
         {/* 底部导航 */}
         <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-3">
           <Button
-            onClick={() => window.location.href = '/'}
+            onClick={() => {
+              if (selectedEvent && selectedEvent.id && selectedEvent.id !== '00000000-0000-0000-0000-000000000000') {
+                window.location.href = `/?event_id=${selectedEvent.id}`;
+              } else {
+                window.location.href = '/';
+              }
+            }}
             variant="outline"
             className="flex-1"
           >

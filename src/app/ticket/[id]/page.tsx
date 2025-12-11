@@ -107,7 +107,13 @@ export default function TicketPage() {
                 <p className="text-gray-600 text-sm">{error || '请检查凭证链接是否正确'}</p>
               </div>
               <Button
-                onClick={() => router.push('/')}
+                onClick={() => {
+                  if (attendee?.event_id && attendee.event_id !== '00000000-0000-0000-0000-000000000000') {
+                    router.push(`/?event_id=${attendee.event_id}`);
+                  } else {
+                    router.push('/');
+                  }
+                }}
                 className="w-full"
               >
                 返回首页
@@ -216,7 +222,13 @@ export default function TicketPage() {
 
         {/* 底部按钮 */}
         <Button
-          onClick={() => router.push('/')}
+          onClick={() => {
+            if (attendee?.event_id && attendee.event_id !== '00000000-0000-0000-0000-000000000000') {
+              router.push(`/?event_id=${attendee.event_id}`);
+            } else {
+              router.push('/');
+            }
+          }}
           variant="outline"
           className="w-full"
         >
