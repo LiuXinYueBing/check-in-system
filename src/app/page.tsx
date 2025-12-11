@@ -17,21 +17,55 @@ function HomePageContent() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [currentEventId, setCurrentEventId] = useState('');
+  const [eventLoading, setEventLoading] = useState(true);
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // 🔥 核心逻辑1: URL参数绑定场次
+  // 🔥 核心逻辑1: URL参数绑定场次，如果没有参数则获取最新活动
   useEffect(() => {
-    // 优先读取URL参数中的event_id
-    const urlEventId = searchParams.get('event_id');
+    const initializeEventId = async () => {
+      // 优先读取URL参数中的event_id
+      const urlEventId = searchParams.get('event_id');
 
-    if (urlEventId) {
-      setCurrentEventId(urlEventId);
-    } else {
-      // 如果没有参数，使用默认ID
-      const defaultEventId = '00000000-0000-0000-0000-000000000000';
-      setCurrentEventId(defaultEventId);
-    }
+      if (urlEventId) {
+        setCurrentEventId(urlEventId);
+        setEventLoading(false);
+        return;
+      }
+
+      // 如果没有参数，获取最新的活动ID
+      try {
+        const { data: events, error } = await supabase
+          .from('events')
+          .select('id')
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.error('获取活动列表失败:', error);
+          // 如果获取失败，使用空UUID
+          setCurrentEventId('00000000-0000-0000-0000-000000000000');
+          setEventLoading(false);
+          return;
+        }
+
+        if (events && events.length > 0) {
+          setCurrentEventId(events[0].id);
+          console.log('✅ 自动获取最新活动ID:', events[0].id);
+        } else {
+          // 如果没有活动，使用空UUID
+          setCurrentEventId('00000000-0000-0000-0000-000000000000');
+          console.log('⚠️ 没有找到活动，使用空UUID');
+        }
+        setEventLoading(false);
+      } catch (err) {
+        console.error('获取活动ID失败:', err);
+        setCurrentEventId('00000000-0000-0000-0000-000000000000');
+        setEventLoading(false);
+      }
+    };
+
+    initializeEventId();
   }, [searchParams]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,68 +173,95 @@ function HomePageContent() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                  姓名
-                </label>
-                <Input
-                  id="name"
-                  name="name"
-                  type="text"
-                  placeholder="请输入您的姓名"
-                  value={formData.name}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  autoComplete="name"
-                  className="h-12"
-                />
+            {eventLoading && (
+              <div className="text-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto mb-2"></div>
+                <p className="text-sm text-gray-600">正在获取活动信息...</p>
               </div>
+            )}
 
-              <div className="space-y-2">
-                <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                  手机号
-                </label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="请输入您的手机号"
-                  value={formData.phone}
-                  onChange={handleInputChange}
-                  disabled={loading}
-                  autoComplete="tel"
-                  className="h-12"
-                />
+            {!eventLoading && currentEventId && currentEventId !== '00000000-0000-0000-0000-000000000000' && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700">✅ 已自动关联到当前活动</p>
               </div>
+            )}
 
-              {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center">
-                  <svg className="w-4 h-4 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                  </svg>
-                  <span className="text-sm text-red-600">{error}</span>
+            {!eventLoading && (!currentEventId || currentEventId === '00000000-0000-0000-0000-000000000000') && (
+              <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="text-sm text-yellow-700">⚠️ 请在URL中添加活动ID，或创建活动后再报名</p>
+              </div>
+            )}
+
+            {!eventLoading && currentEventId && currentEventId !== '00000000-0000-0000-0000-000000000000' && (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                    姓名
+                  </label>
+                  <Input
+                    id="name"
+                    name="name"
+                    type="text"
+                    placeholder="请输入您的姓名"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    autoComplete="name"
+                    className="h-12"
+                  />
                 </div>
-              )}
 
-              <Button
-                type="submit"
-                className="w-full h-12 text-base font-medium shadow-lg"
-                disabled={loading}
-              >
-                {loading ? (
-                  <div className="flex items-center">
-                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                <div className="space-y-2">
+                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                    手机号
+                  </label>
+                  <Input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    placeholder="请输入您的手机号"
+                    value={formData.phone}
+                    onChange={handleInputChange}
+                    disabled={loading}
+                    autoComplete="tel"
+                    className="h-12"
+                  />
+                </div>
+
+                {error && (
+                  <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center">
+                    <svg className="w-4 h-4 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
                     </svg>
-                    提交中...
+                    <span className="text-sm text-red-600">{error}</span>
                   </div>
-                ) : (
-                  '提交报名'
                 )}
-              </Button>
-            </form>
+
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-base font-medium shadow-lg"
+                  disabled={loading || eventLoading}
+                >
+                  {loading || eventLoading ? (
+                    <div className="flex items-center">
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {eventLoading ? '加载活动信息...' : '提交中...'}
+                    </div>
+                  ) : (
+                    '提交报名'
+                  )}
+                </Button>
+              </form>
+            )}
+
+            {!eventLoading && (!currentEventId || currentEventId === '00000000-0000-0000-0000-000000000000') && (
+              <div className="text-center py-8">
+                <p className="text-gray-600 mb-4">没有可用的活动，请联系工作人员创建活动后再报名</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 
