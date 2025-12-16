@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">扫码签到</string>
+    <string name="title_activity_main">扫码签到</string>
+    <string name="package_name">com.checkin.scan</string>
+    <string name="custom_url_scheme">com.checkin.scan</string>
+</resources>

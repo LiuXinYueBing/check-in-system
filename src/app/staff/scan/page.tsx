@@ -65,6 +65,17 @@ export default function StaffScanPage() {
   // 加载所有活动
   useEffect(() => {
     fetchEvents();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 动态加载 vConsole 调试工具（仅客户端）
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('vconsole').then(({ default: VConsole }) => {
+        new VConsole();
+      }).catch((err) => {
+        console.warn('Failed to load vConsole:', err);
+      });
+    }
   }, []);
 
   const fetchEvents = async () => {

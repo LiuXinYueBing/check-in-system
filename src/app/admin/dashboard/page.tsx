@@ -60,7 +60,7 @@ function AdminDashboardPageContent() {
 
     fetchEvents();
     fetchAttendees();
-  }, [searchParams]);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     // 当 events 加载完成后，处理URL参数
@@ -91,7 +91,7 @@ function AdminDashboardPageContent() {
     }
 
     filterAttendees();
-  }, [attendees, statusFilter, eventFilter, events, searchParams]);
+  }, [attendees, statusFilter, eventFilter, events, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchEvents = async () => {
     try {
@@ -317,7 +317,7 @@ function AdminDashboardPageContent() {
   // 生成活动报名链接
   const generateEventLink = (event: Event) => {
     const baseUrl = window.location.origin;
-    return `${baseUrl}?event_id=${event.id}`;
+    return `${baseUrl}/?event_id=${event.id}`;
   };
 
   // 复制链接到剪贴板

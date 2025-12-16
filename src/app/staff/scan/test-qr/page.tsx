@@ -25,7 +25,7 @@ export default function TestQRPage() {
       stopScanner();
       stopStyleFixInterval();
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔥 修复摄像头选择器文字旋转问题 - 简化版本
   const fixCameraSelectorStyles = () => {

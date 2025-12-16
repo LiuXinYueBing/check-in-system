@@ -20,12 +20,18 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0",
     "build": "next build",
+    "build:app": "cp next.config.js next.config.backup.js && cp next.config.app.js next.config.js && rm -rf src/app/ticket || true && npm run build && cp next.config.backup.js next.config.js && git checkout src/app/ticket",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
-    "format": "next lint --fix"
+    "format": "next lint --fix",
+    "cap:sync": "npm run build:app && npx cap sync android",
+    "cap:open": "npx cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-label": "^2.0.2",
     "@radix-ui/react-select": "^2.0.0",
@@ -41,7 +47,8 @@
     "react": "^18",
     "react-dom": "^18",
     "react-qr-code": "^2.0.18",
-    "tailwind-merge": "^2.0.0"
+    "tailwind-merge": "^2.0.0",
+    "vconsole": "^3.15.1"
   },
   "devDependencies": {
     "@types/node": "^20",

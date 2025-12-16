@@ -1,0 +1,20 @@
+# 🚀 Vercel环境变量配置
+# 复制以下内容到 Vercel 环境变量配置中
+
+=== 环境变量 1 ===
+Name: NEXT_PUBLIC_SUPABASE_URL
+Value: https://lpbkoksinwcmoniamsvq.supabase.co
+Environments: Production, Preview, Development
+
+=== 环境变量 2 ===
+Name: NEXT_PUBLIC_SUPABASE_ANON_KEY
+Value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxwYmtva3NpbndjbW9uaWFtc3ZxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2NzAzNjEsImV4cCI6MjA4MDI0NjM2MX0.Be8NAJ8jdZtdl3cTwtsJbjphcePUf7gFHPbxEXjc1_Q
+Environments: Production, Preview, Development
+
+# 💡 配置步骤：
+# 1. 访问 https://vercel.com/dashboard
+# 2. 点击项目: liuyins-projects/checkin-system-live
+# 3. 进入 Settings → Environment Variables
+# 4. 添加以上两个环境变量
+# 5. 选择所有三个环境
+# 6. 保存后自动重新部署

@@ -129,7 +129,7 @@ export default function ScannerComponent({ onScanSuccess, isActive }: ScannerCom
       logger.error('❌ 扫描器状态管理错误:', error);
       setRuntimeError(`扫描器状态管理错误: ${getErrorMessage(error)}`);
     }
-  }, [isActive, isScannerInitialized]);
+  }, [isActive, isScannerInitialized]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 🔥 组件卸载时清除资源
   useEffect(() => {

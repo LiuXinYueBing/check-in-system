@@ -1,0 +1,697 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
+import { logger } from '@/lib/logger';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Attendee, Event } from '@/types';
+import { QrCode, User, Clock, CheckCircle, XCircle, Gift, MapPin, ChevronDown, Settings } from 'lucide-react';
+import ScannerWrapper from '@/components/ScannerWrapper';
+import { ScannerErrorBoundary } from '@/components/ScannerErrorBoundary';
+import { safeLocalStorageGet, safeLocalStorageSet } from '@/utils/local-storage';
+import { LS_KEYS, SCAN_CONFIG, UI_CONFIG, ATTENDEE_STATUS } from '@/lib/constants';
+
+export default function StaffScanAppPage() {
+  const [attendee, setAttendee] = useState<Attendee | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState('');
+  const [selectedEventName, setSelectedEventName] = useState('');
+  const [loadingEvents, setLoadingEvents] = useState(true);
+  const [showEventSelector, setShowEventSelector] = useState(false);
+  const [eventStats, setEventStats] = useState({
+    total: 0,
+    registered: 0,
+    checkedIn: 0,
+    redeemed: 0,
+    loading: true
+  });
+  const [globalNotification, setGlobalNotification] = useState<{
+    show: boolean;
+    type: 'success' | 'error' | 'warning';
+    message: string;
+  }>({
+    show: false,
+    type: 'error',
+    message: ''
+  });
+
+  // 自动继续扫描设置
+  const [autoContinueScan, setAutoContinueScan] = useState<boolean>(true);
+  const [waitTime, setWaitTime] = useState<number>(SCAN_CONFIG.DEFAULT_WAIT_TIME);
+  const [showSettings, setShowSettings] = useState<boolean>(false);
+
+  // 加载设置
+  useEffect(() => {
+    const savedAutoContinue = safeLocalStorageGet<boolean>(LS_KEYS.STAFF_AUTO_CONTINUE_SCAN, true);
+    const savedWaitTime = safeLocalStorageGet<number>(LS_KEYS.STAFF_WAIT_TIME, SCAN_CONFIG.DEFAULT_WAIT_TIME);
+
+    setAutoContinueScan(savedAutoContinue);
+    setWaitTime(savedWaitTime);
+  }, []);
+
+  // 保存设置
+  useEffect(() => {
+    safeLocalStorageSet(LS_KEYS.STAFF_AUTO_CONTINUE_SCAN, autoContinueScan);
+  }, [autoContinueScan]);
+
+  useEffect(() => {
+    safeLocalStorageSet(LS_KEYS.STAFF_WAIT_TIME, waitTime);
+  }, [waitTime]);
+
+  // 加载所有活动
+  useEffect(() => {
+    fetchEvents();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 动态加载 vConsole 调试工具（仅客户端）
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      import('vconsole').then(({ default: VConsole }) => {
+        new VConsole();
+      }).catch((err) => {
+        console.warn('Failed to load vConsole:', err);
+      });
+    }
+  }, []);
+
+  const fetchEvents = async () => {
+    try {
+      logger.log('🔄 开始获取活动列表...');
+      setLoadingEvents(true);
+
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        logger.error('❌ Fetch events error:', error);
+        showGlobalNotification('error', `无法获取活动列表: ${error.message}`);
+        return;
+      }
+
+      logger.log('✅ 成功获取活动列表，数量:', data?.length || 0);
+      setEvents(data || []);
+
+      // 检查本地是否有缓存的活动
+      const cachedEventId = safeLocalStorageGet<string>(LS_KEYS.STAFF_SELECTED_EVENT_ID, '');
+      const cachedEventName = safeLocalStorageGet<string>(LS_KEYS.STAFF_SELECTED_EVENT_NAME, '');
+
+      if (cachedEventId && cachedEventName) {
+        logger.log('📋 找到缓存活动:', cachedEventName);
+        setSelectedEventId(cachedEventId);
+        setSelectedEventName(cachedEventName);
+        setShowEventSelector(false);
+        setScanning(true);
+        fetchEventStats(cachedEventId);
+      } else {
+        logger.log('📋 未找到缓存活动，显示选择器');
+        setShowEventSelector(true);
+        setScanning(false);
+      }
+    } catch (err) {
+      logger.error('Fetch events error:', err);
+      showGlobalNotification('error', '无法获取活动列表');
+    } finally {
+      setLoadingEvents(false);
+    }
+  };
+
+  const handleEventSelect = (eventId: string, eventName: string, location: string) => {
+    logger.log('🎯 选择活动:', eventName);
+    setSelectedEventId(eventId);
+    setSelectedEventName(eventName);
+    setShowEventSelector(false);
+
+    safeLocalStorageSet(LS_KEYS.STAFF_SELECTED_EVENT_ID, eventId);
+    safeLocalStorageSet(LS_KEYS.STAFF_SELECTED_EVENT_NAME, `${eventName} - ${location}`);
+
+    setScanning(true);
+    fetchEventStats(eventId);
+  };
+
+  const fetchEventStats = async (eventId: string) => {
+    setEventStats(prev => ({ ...prev, loading: true }));
+    try {
+      const { data, error } = await supabase
+        .from('attendees')
+        .select('*')
+        .eq('event_id', eventId);
+
+      if (error) throw error;
+
+      const stats = (data || []).reduce((acc, attendee) => {
+        acc.total++;
+        switch (attendee.status) {
+          case ATTENDEE_STATUS.REGISTERED:
+            acc.registered++;
+            break;
+          case ATTENDEE_STATUS.CHECKED_IN:
+            acc.checkedIn++;
+            break;
+          case ATTENDEE_STATUS.REDEEMED:
+            acc.redeemed++;
+            break;
+        }
+        return acc;
+      }, { total: 0, registered: 0, checkedIn: 0, redeemed: 0 });
+
+      setEventStats({ ...stats, loading: false });
+    } catch (err: unknown) {
+      logger.error('Fetch event stats error:', err);
+      setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: false });
+    }
+  };
+
+  const handleSwitchEvent = () => {
+    logger.log('🔄 切换活动，停止扫描');
+    setScanning(false);
+    setShowEventSelector(true);
+    setEventStats({ total: 0, registered: 0, checkedIn: 0, redeemed: 0, loading: true });
+  };
+
+  // 全局通知函数
+  const showGlobalNotification = (type: 'success' | 'error' | 'warning', message: string) => {
+    setGlobalNotification({ show: true, type, message });
+    setTimeout(() => {
+      setGlobalNotification({ show: false, type: 'error', message: '' });
+    }, UI_CONFIG.NOTIFICATION_DURATION);
+  };
+
+  // 处理扫描成功
+  const handleScanSuccess = async (uuid: string) => {
+    setScanning(false);
+
+    try {
+      const { data: scannedAttendee, error: fetchError } = await supabase
+        .from('attendees')
+        .select(`
+          *,
+          events (*)
+        `)
+        .eq('id', uuid)
+        .single();
+
+      if (fetchError) {
+        logger.error('Fetch attendee error:', fetchError);
+        showGlobalNotification('error', '查询失败，无法查询用户信息');
+        setTimeout(() => {
+          setScanning(true);
+        }, UI_CONFIG.SCAN_RESULT_DELAY);
+        return;
+      }
+
+      if (scannedAttendee.event_id !== selectedEventId) {
+        showGlobalNotification('warning', '⚠️ 场次错误！该用户属于其他活动，请核实！');
+        setTimeout(() => {
+          setScanning(true);
+        }, UI_CONFIG.SCAN_RESULT_DELAY);
+        return;
+      }
+
+      setAttendee(scannedAttendee);
+      fetchEventStats(selectedEventId);
+
+    } catch (err: unknown) {
+      logger.error('Scan fetch error:', err);
+      showGlobalNotification('error', '查询失败，无法查询用户信息');
+      setTimeout(() => {
+        setScanning(true);
+      }, UI_CONFIG.SCAN_RESULT_DELAY);
+    }
+  };
+
+  // 恢复扫描
+  const resumeScanning = () => {
+    logger.log('🔄 恢复扫描状态');
+    logger.log('📊 当前状态:', {
+      attendee: attendee ? attendee.name : null,
+      scanning: scanning,
+      autoContinueScan: autoContinueScan,
+      waitTime: waitTime
+    });
+    setAttendee(null);
+    setScanning(true);
+  };
+
+  const handleCheckIn = async () => {
+    if (!attendee) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('attendees')
+        .update({
+          status: 'checked_in',
+          check_in_time: new Date().toISOString()
+        })
+        .eq('id', attendee.id);
+
+      if (error) throw error;
+
+      showGlobalNotification('success', `${attendee.name} 已成功入场`);
+
+      const { data } = await supabase
+        .from('attendees')
+        .select('*')
+        .eq('id', attendee.id)
+        .single();
+
+      if (data) {
+        setAttendee(data);
+      }
+
+      fetchEventStats(selectedEventId);
+
+      // 自动继续扫描
+      if (autoContinueScan) {
+        setTimeout(() => {
+          logger.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
+          resumeScanning();
+          setLoading(false);
+        }, waitTime * 1000);
+      } else {
+        setLoading(false);
+      }
+    } catch (err: unknown) {
+      logger.error('Check-in error:', err);
+      showGlobalNotification('error', '操作失败，请稍后重试');
+
+      setTimeout(() => {
+        resumeScanning();
+        setLoading(false);
+      }, UI_CONFIG.ERROR_RETRY_DELAY);
+    }
+  };
+
+  const handleRedeem = async () => {
+    if (!attendee) return;
+
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('attendees')
+        .update({
+          status: 'redeemed',
+          redeem_time: new Date().toISOString()
+        })
+        .eq('id', attendee.id);
+
+      if (error) throw error;
+
+      showGlobalNotification('success', `${attendee.name} 已完成核销`);
+
+      const { data } = await supabase
+        .from('attendees')
+        .select('*')
+        .eq('id', attendee.id)
+        .single();
+
+      if (data) {
+        setAttendee(data);
+      }
+
+      fetchEventStats(selectedEventId);
+
+      // 自动继续扫描
+      if (autoContinueScan) {
+        setTimeout(() => {
+          logger.log(`⏱️ ${waitTime}秒后自动继续扫描...`);
+          resumeScanning();
+          setLoading(false);
+        }, waitTime * 1000);
+      } else {
+        setLoading(false);
+      }
+    } catch (err: unknown) {
+      logger.error('Redeem error:', err);
+      showGlobalNotification('error', '操作失败，请稍后重试');
+
+      setTimeout(() => {
+        resumeScanning();
+        setLoading(false);
+      }, UI_CONFIG.ERROR_RETRY_DELAY);
+    }
+  };
+
+  const getStatusInfo = (status: string) => {
+    switch (status) {
+      case ATTENDEE_STATUS.REGISTERED:
+        return {
+          text: '待入场',
+          color: 'registered',
+          icon: Clock,
+          description: '请确认用户入场',
+          action: 'confirmCheckIn',
+          actionText: '确认入场',
+          actionColor: 'bg-green-600 hover:bg-green-700',
+        };
+      case ATTENDEE_STATUS.CHECKED_IN:
+        return {
+          text: '已入场',
+          color: 'checkedIn',
+          icon: CheckCircle,
+          description: '可以核销抵用券',
+          action: 'redeem',
+          actionText: '核销抵用券',
+          actionColor: 'bg-orange-600 hover:bg-orange-700',
+        };
+      case ATTENDEE_STATUS.REDEEMED:
+        return {
+          text: '已核销',
+          color: 'redeemed',
+          icon: XCircle,
+          description: '该用户已完成核销',
+          action: null,
+          actionText: '',
+          actionColor: '',
+        };
+      default:
+        return {
+          text: '未知状态',
+          color: 'default',
+          icon: Clock,
+          description: '请联系工作人员',
+          action: null,
+          actionText: '',
+          actionColor: '',
+        };
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-2 py-4">
+      <div className="max-w-md mx-auto space-y-4">
+        {/* 头部 */}
+        <div className="text-center mb-4">
+          <div className="w-16 h-16 bg-gradient-to-br from-primary-500 to-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-lg">
+            <QrCode className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-xl font-bold text-gray-900 mb-1">扫码签到 App</h1>
+          <p className="text-sm text-gray-600">选择活动场次，扫码核验用户</p>
+        </div>
+
+        {/* 场次选择弹窗 */}
+        {showEventSelector && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-auto p-6 space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">选择活动场次</h3>
+              <p className="text-sm text-gray-600 mb-4">请选择您要执行签到/核销的活动</p>
+
+              {loadingEvents ? (
+                <div className="text-center py-8">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                  <p className="mt-4 text-gray-600">正在加载活动列表...</p>
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {events.length === 0 ? (
+                    <p className="text-center text-gray-500 py-8">暂无活动</p>
+                  ) : (
+                    events.map((event) => (
+                      <div
+                        key={event.id}
+                        onClick={() => handleEventSelect(event.id, event.name, event.location || '未指定地点')}
+                        className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                      >
+                        <div className="font-medium text-gray-900">{event.name}</div>
+                        <div className="text-sm text-gray-500 flex items-center">
+                          <MapPin className="w-4 h-4 mr-1" />
+                          {event.location}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleSwitchEvent}
+                  variant="outline"
+                  className="mt-4"
+                >
+                  取消
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 当前选中的活动 */}
+        {selectedEventId && !showEventSelector && (
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 mb-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-blue-900">
+                当前活动：{selectedEventName}
+              </h3>
+              <Button
+                onClick={handleSwitchEvent}
+                variant="outline"
+                size="sm"
+              >
+                <ChevronDown className="w-4 h-4 mr-1" />
+                切换
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 自动继续扫描设置 */}
+        {selectedEventId && !showEventSelector && (
+          <div className="bg-gray-50 border rounded-xl shadow-lg p-3">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-2">
+                <Settings className="w-4 h-4 text-gray-600" />
+                <h3 className="text-sm font-semibold text-gray-900">自动继续扫描</h3>
+              </div>
+              <Button
+                onClick={() => setShowSettings(!showSettings)}
+                variant="ghost"
+                size="sm"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                {showSettings ? '收起' : '展开'}
+              </Button>
+            </div>
+
+            <div className={`space-y-3 ${showSettings ? 'block' : 'hidden'}`}>
+              <div className="flex items-center justify-between">
+                <label className="text-sm text-gray-700">扫码后自动继续</label>
+                <button
+                  onClick={() => setAutoContinueScan(!autoContinueScan)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    autoContinueScan ? 'bg-blue-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      autoContinueScan ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {autoContinueScan && (
+                <div className="flex items-center justify-between">
+                  <label className="text-sm text-gray-700">等待时间</label>
+                  <select
+                    value={waitTime}
+                    onChange={(e) => setWaitTime(parseInt(e.target.value, 10))}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value={1}>1秒</option>
+                    <option value={2}>2秒</option>
+                    <option value={3}>3秒</option>
+                    <option value={5}>5秒</option>
+                  </select>
+                </div>
+              )}
+
+              <div className="text-xs text-gray-500 bg-white rounded p-2">
+                💡 {autoContinueScan
+                  ? `操作完成后将等待${waitTime}秒自动继续扫描`
+                  : '操作完成后需要手动点击"继续扫描"按钮'
+                }
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 本场数据统计 */}
+        {selectedEventId && !showEventSelector && (
+          <div className="bg-white border rounded-xl shadow-lg p-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">本场数据</h3>
+            {eventStats.loading ? (
+              <div className="text-center">
+                <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                <p className="mt-2 text-xs text-gray-600">正在加载数据...</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="text-center p-2 bg-blue-50 rounded-lg">
+                  <div className="text-lg font-bold text-blue-900">{eventStats.total}</div>
+                  <div className="text-xs text-blue-600">总报名</div>
+                </div>
+                <div className="text-center p-2 bg-yellow-50 rounded-lg">
+                  <div className="text-lg font-bold text-yellow-900">{eventStats.registered}</div>
+                  <div className="text-xs text-yellow-600">待入场</div>
+                </div>
+                <div className="text-center p-2 bg-green-50 rounded-lg">
+                  <div className="text-lg font-bold text-green-900">{eventStats.checkedIn}</div>
+                  <div className="text-xs text-green-600">已入场</div>
+                </div>
+                <div className="text-center p-2 bg-orange-50 rounded-lg">
+                  <div className="text-lg font-bold text-orange-900">{eventStats.redeemed}</div>
+                  <div className="text-xs text-orange-600">已核销</div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 扫描区域 */}
+        {!attendee && !showEventSelector && scanning && (
+          <ScannerErrorBoundary>
+            <ScannerWrapper
+              onScanSuccess={handleScanSuccess}
+              isActive={scanning}
+            />
+          </ScannerErrorBoundary>
+        )}
+
+        {/* 如果没有选择活动，显示提示 */}
+        {!attendee && !showEventSelector && !scanning && (
+          <Card className="shadow-xl border-0">
+            <CardContent className="text-center py-8">
+              <p className="text-gray-600 mb-4">请先选择活动场次</p>
+              <Button onClick={() => setShowEventSelector(true)}>
+                选择活动
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* 用户信息区域 */}
+        {attendee && (
+          <div className="space-y-4">
+            <Card className="shadow-xl border-0 overflow-hidden">
+              <CardHeader className="bg-gradient-to-r from-primary-50 to-indigo-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center">
+                      <User className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-lg">{attendee.name}</CardTitle>
+                      <CardDescription className="text-base">{attendee.phone}</CardDescription>
+                    </div>
+                  </div>
+                  <Badge variant={getStatusInfo(attendee.status).color as any}>
+                    {getStatusInfo(attendee.status).text}
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-6 pt-6">
+                <div className="space-y-3">
+                  {(() => {
+                    const statusInfo = getStatusInfo(attendee.status);
+                    return (
+                      <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                        {statusInfo.icon && (
+                          <statusInfo.icon className="w-5 h-5 text-gray-600" />
+                        )}
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-900">
+                            {statusInfo.description}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="bg-blue-50 p-3 rounded-lg">
+                      <p className="text-blue-600 text-xs mb-1">报名时间</p>
+                      <p className="font-medium text-blue-900">
+                        {new Date(attendee.created_at).toLocaleDateString('zh-CN')}
+                      </p>
+                    </div>
+                    {attendee.check_in_time && (
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <p className="text-green-600 text-xs mb-1">入场时间</p>
+                        <p className="font-medium text-green-900">
+                          {new Date(attendee.check_in_time).toLocaleTimeString('zh-CN', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          })}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {getStatusInfo(attendee.status).action === 'confirmCheckIn' && (
+                    <Button
+                      onClick={handleCheckIn}
+                      disabled={loading}
+                      className={`w-full h-14 text-base font-medium shadow-lg ${getStatusInfo(attendee.status).actionColor}`}
+                    >
+                      <CheckCircle className="w-5 h-5 mr-2" />
+                      {loading ? '处理中...' : '确认入场 (Check In)'}
+                    </Button>
+                  )}
+
+                  {getStatusInfo(attendee.status).action === 'redeem' && (
+                    <Button
+                      onClick={handleRedeem}
+                      disabled={loading}
+                      className={`w-full h-14 text-base font-medium shadow-lg ${getStatusInfo(attendee.status).actionColor}`}
+                    >
+                      <Gift className="w-5 h-5 mr-2" />
+                      {loading ? '处理中...' : '核销抵用券 (Redeem Voucher)'}
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={resumeScanning}
+                    variant="outline"
+                    className="w-full h-12"
+                  >
+                    继续扫描
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* 全局通知弹窗 */}
+        {globalNotification.show && (
+          <div className={`global-notification ${globalNotification.type}`}>
+            <div className="global-notification-content">
+              <div className="text-lg font-medium mb-2">
+                {globalNotification.type === 'success' && '✅'}
+                {globalNotification.type === 'error' && '❌'}
+                {globalNotification.type === 'warning' && '⚠️'}
+                {' '}
+                {globalNotification.type === 'success' && '成功'}
+                {globalNotification.type === 'error' && '错误'}
+                {globalNotification.type === 'warning' && '警告'}
+              </div>
+              <div className="text-gray-700">
+                {globalNotification.message}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

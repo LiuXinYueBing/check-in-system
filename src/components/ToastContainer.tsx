@@ -40,6 +40,13 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
 
+  const handleRemove = () => {
+    setIsLeaving(true);
+    setTimeout(() => {
+      onRemove(toast.id);
+    }, 300); // 动画持续时间
+  };
+
   useEffect(() => {
     // 进入动画
     const enterTimer = setTimeout(() => setIsVisible(true), 10);
@@ -57,14 +64,7 @@ const ToastItem: React.FC<ToastItemProps> = ({ toast, onRemove }) => {
     }
 
     return () => clearTimeout(enterTimer);
-  }, [toast.duration, toast.id]);
-
-  const handleRemove = () => {
-    setIsLeaving(true);
-    setTimeout(() => {
-      onRemove(toast.id);
-    }, 300); // 动画持续时间
-  };
+  }, [toast.duration, toast.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const getIcon = () => {
     const iconClass = "w-5 h-5";
